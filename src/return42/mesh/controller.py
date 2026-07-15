@@ -14,7 +14,7 @@ from .message import MeshMessage, MessageTopic
 from .transport import MeshTransport
 
 
-MessageHandler = Callable[[MeshMessage], Awaitable[None]]
+MessageHandler = Callable[[MeshMessage], Awaitable[None] | None]
 
 
 class SmeshController:
