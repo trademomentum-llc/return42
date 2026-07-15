@@ -148,8 +148,6 @@ class SmeshController:
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:
-        if not self._is_targeted_at_me(msg):
-            return
         handlers = self._handlers.get(topic, [])
         for handler in handlers:
             if inspect.iscoroutinefunction(handler):

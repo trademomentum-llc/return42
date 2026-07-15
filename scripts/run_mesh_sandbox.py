@@ -14,20 +14,20 @@ async def main() -> None:
     controllers = [SmeshController(node, bus, heartbeat_interval=1.0) for node in nodes]
 
     async def handler(msg):
-        print(f"[{msg.destination or 'broadcast'}] {msg.source}: {msg.payload}")
+        print(f"[{msg.destination or 'broadcast'}] {msg.source}: {msg.payload}", flush=True)
 
     for ctrl in controllers:
         ctrl.on_message(MessageTopic.COMMAND, handler)
         await ctrl.start()
 
-    print("Sandbox running. Press Ctrl+C to stop.")
+    print("Sandbox running. Press Ctrl+C to stop.", flush=True)
     for ctrl in controllers:
-        print(f"{ctrl.node_id} peers: {ctrl.peers}")
+        print(f"{ctrl.node_id} peers: {ctrl.peers}", flush=True)
     try:
         while True:
             await asyncio.sleep(5)
             for ctrl in controllers:
-                print(f"{ctrl.node_id} peers: {ctrl.peers}")
+                print(f"{ctrl.node_id} peers: {ctrl.peers}", flush=True)
     except asyncio.CancelledError:
         pass
     except KeyboardInterrupt:
