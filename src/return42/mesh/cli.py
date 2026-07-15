@@ -10,7 +10,7 @@ import typer
 from return42.observability.evidence import EvidenceLogger
 from return42.observability.telemetry import EventLevel, TelemetryEvent
 
-from .controller import SmeshController
+from .controller import MessageHandler, SmeshController
 from .identity import NodeIdentity
 from .message import MeshMessage, MessageTopic
 from .transport import InMemoryTransport
@@ -34,6 +34,15 @@ def _mesh_message_to_telemetry(msg: MeshMessage) -> TelemetryEvent:
             "signature": msg.signature,
         },
     )
+
+
+def _make_evidence_handler(evidence: EvidenceLogger) -> MessageHandler:
+    """Return an async handler that offloads evidence writes to a worker thread."""
+
+    async def handler(msg: MeshMessage) -> None:
+        await asyncio.to_thread(evidence.write, _mesh_message_to_telemetry(msg))
+
+    return handler
 
 
 @app.command("mesh-node")
@@ -61,11 +70,8 @@ def mesh_node(
         evidence = EvidenceLogger(log_dir=log_dir)
         controller = SmeshController(identity, tx, heartbeat_interval=heartbeat)
 
-        async def log_handler(msg: MeshMessage) -> None:
-            evidence.write(_mesh_message_to_telemetry(msg))
-
         for topic in MessageTopic:
-            controller.on_message(topic, log_handler)
+            controller.on_message(topic, _make_evidence_handler(evidence))
         await controller.start()
         typer.echo(f"Node {node_id} running with {transport} transport. Peers: {controller.peers}")
         try:

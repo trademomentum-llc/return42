@@ -1,8 +1,12 @@
+from unittest.mock import AsyncMock, patch
+
+import pytest
 from typer.testing import CliRunner
 
-from return42.mesh.cli import _mesh_message_to_telemetry, app
+from return42.mesh.cli import _make_evidence_handler, _mesh_message_to_telemetry, app
 from return42.mesh.message import MeshMessage, MessageTopic
 from return42.observability.cli import app as observability_app
+from return42.observability.evidence import EvidenceLogger
 
 runner = CliRunner()
 
@@ -38,3 +42,24 @@ def test_mesh_message_to_telemetry_preserves_signature():
     assert event.payload["data"] == {"action": "ping"}
     assert event.name == "mesh.message.command"
     assert event.source == "node-a"
+
+
+@pytest.mark.asyncio
+async def test_evidence_handler_offloads_write_to_thread(tmp_path):
+    """The async evidence handler must not perform synchronous file I/O."""
+    evidence = EvidenceLogger(log_dir=str(tmp_path))
+    handler = _make_evidence_handler(evidence)
+    msg = MeshMessage(
+        source="node-a",
+        destination="node-b",
+        topic=MessageTopic.COMMAND,
+        payload={"action": "ping"},
+    )
+
+    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
+        await handler(msg)
+
+    mock_to_thread.assert_awaited_once()
+    # Ensure the callable passed to to_thread is the synchronous evidence.write.
+    call_args = mock_to_thread.call_args
+    assert call_args[0][0] == evidence.write
