@@ -64,7 +64,8 @@ def mesh_node(
         async def log_handler(msg: MeshMessage) -> None:
             evidence.write(_mesh_message_to_telemetry(msg))
 
-        controller.on_message(MessageTopic.COMMAND, log_handler)
+        for topic in MessageTopic:
+            controller.on_message(topic, log_handler)
         await controller.start()
         typer.echo(f"Node {node_id} running with {transport} transport. Peers: {controller.peers}")
         try:
