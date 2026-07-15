@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Return42 — Resilient Edge Communication</title>
+  <meta name="description" content="A local-first edge communication system. Mesh networking, trust-gated bridging, and resilient SIP routing for sovereign infrastructure.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&amp;family=Sora:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #080a0d;
+      --bg-surface: #0f1419;
+      --bg-panel: #141b23;
+      --bg-panel-hover: #1a232d;
+      --text-primary: #e8e6e1;
+      --text-secondary: #8b949e;
+      --text-muted: #57606a;
+      --accent-amber: #f4a261;
+      --accent-teal: #2a9d8f;
+      --accent-red: #e76f51;
+      --grid-color: rgba(244, 162, 97, 0.08);
+      --scanline: rgba(0, 0, 0, 0.12);
+      --glow-amber: rgba(244, 162, 97, 0.25);
+      --glow-teal: rgba(42, 157, 143, 0.25);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background-color: var(--bg-deep);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Noise & scanline overlay */
+    .noise {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        var(--scanline) 2px,
+        var(--scanline) 4px
+      );
+      opacity: 0.4;
+    }
+
+    /* Grid background */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 70%);
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 600;
+      line-height: 1.1;
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 4vw;
+      background: linear-gradient(180deg, rgba(8,10,13,0.95) 0%, rgba(8,10,13,0) 100%);
+      backdrop-filter: blur(8px);
+    }
+
+    .logo {
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: var(--accent-amber);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo::before {
+      content: '◈';
+      color: var(--accent-teal);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      position: relative;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: var(--accent-amber);
+      transition: width 0.3s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent-amber);
+    }
+
+    .nav-links a:hover::after {
+      width: 100%;
+    }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      padding: 8rem 4vw 4rem;
+      gap: 4rem;
+      position: relative;
+    }
+
+    .hero-content {
+      max-width: 680px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.9rem;
+      border: 1px solid var(--accent-teal);
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--accent-teal);
+      margin-bottom: 1.5rem;
+      background: rgba(42, 157, 143, 0.08);
+    }
+
+    .status-pill::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--accent-teal);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .hero h1 {
+      font-size: clamp(3rem, 7vw, 6rem);
+      margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-amber) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero h1 span {
+      display: block;
+      font-size: 0.35em;
+      color: var(--text-muted);
+      -webkit-text-fill-color: var(--text-muted);
+      letter-spacing: 0.15em;
+      margin-top: 0.5rem;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-secondary);
+      margin-bottom: 2rem;
+      max-width: 540px;
+    }
+
+    .cta-group {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.9rem 1.8rem;
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent-amber);
+      color: var(--bg-deep);
+      box-shadow: 0 0 20px var(--glow-amber);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 30px var(--glow-amber);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid rgba(232, 230, 225, 0.25);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-teal);
+      color: var(--accent-teal);
+      box-shadow: 0 0 15px var(--glow-teal);
+    }
+
+    .hero-visual {
+      position: relative;
+      height: 560px;
+      border: 1px solid rgba(244, 162, 97, 0.15);
+      border-radius: 8px;
+      background: var(--bg-panel);
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .hero-visual::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, transparent 0%, var(--bg-panel) 90%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .hero-visual canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .visual-overlay {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      right: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      z-index: 2;
+    }
+
+    .visual-overlay span {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .visual-overlay span::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .visual-overlay span:nth-child(1)::before { background: var(--accent-teal); }
+    .visual-overlay span:nth-child(2)::before { background: var(--accent-amber); }
+    .visual-overlay span:nth-child(3)::before { background: var(--text-muted); }
+
+    /* Sections */
+    section {
+      padding: 6rem 4vw;
+      position: relative;
+    }
+
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--accent-amber);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .section-header {
+      max-width: 800px;
+      margin-bottom: 4rem;
+    }
+
+    .section-header h2 {
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      margin-bottom: 1rem;
+      color: var(--text-primary);
+    }
+
+    .section-header p {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+    }
+
+    /* Problem section */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .problem-card {
+      background: var(--bg-panel);
+      border: 1px solid rgba(232, 230, 225, 0.08);
+      border-radius: 6px;
+      padding: 2rem;
+      transition: all 0.3s ease;
+    }
+
+    .problem-card:hover {
+      background: var(--bg-panel-hover);
+      border-color: rgba(244, 162, 97, 0.25);
+      transform: translateY(-4px);
+    }
+
+    .problem-card h3 {
+      font-size: 1.1rem;
+      color: var(--accent-amber);
+      margin-bottom: 0.75rem;
+    }
+
+    .problem-card p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    /* Architecture planes */
+    .planes {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+    }
+
+    .plane-card {
+      background: var(--bg-panel);
+      border: 1px solid rgba(232, 230, 225, 0.08);
+      border-radius: 8px;
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.4s ease;
+      cursor: pointer;
+    }
+
+    .plane-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--accent-teal);
+      opacity: 0.6;
+      transition: width 0.3s ease;
+    }
+
+    .plane-card:hover::before {
+      width: 100%;
+      opacity: 0.05;
+    }
+
+    .plane-card:hover {
+      border-color: rgba(42, 157, 143, 0.3);
+      transform: translateY(-4px);
+    }
+
+    .plane-card h3 {
+      font-size: 1.4rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .plane-card .icon {
+      font-size: 1.5rem;
+      color: var(--accent-teal);
+    }
+
+    .plane-card p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+    }
+
+    .plane-card .meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+    }
+
+    .feature {
+      text-align: center;
+      padding: 2rem 1rem;
+      border: 1px solid rgba(232, 230, 225, 0.06);
+      border-radius: 6px;
+      background: rgba(20, 27, 35, 0.4);
+      transition: all 0.3s ease;
+    }
+
+    .feature:hover {
+      background: var(--bg-panel);
+      border-color: rgba(244, 162, 97, 0.2);
+    }
+
+    .feature .num {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--accent-teal);
+      opacity: 0.6;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature h4 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Validation section */
+    .validation-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .validation-card {
+      background: var(--bg-panel);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(232, 230, 225, 0.08);
+      transition: all 0.3s ease;
+    }
+
+    .validation-card:hover {
+      border-color: rgba(244, 162, 97, 0.25);
+    }
+
+    .validation-card .card-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid rgba(232, 230, 225, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .validation-card .card-header h3 {
+      font-size: 1.1rem;
+    }
+
+    .validation-card .status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+    }
+
+    .validation-card .status.active {
+      background: rgba(42, 157, 143, 0.15);
+      color: var(--accent-teal);
+    }
+
+    .validation-card .status.pending {
+      background: rgba(244, 162, 97, 0.15);
+      color: var(--accent-amber);
+    }
+
+    .validation-card .card-body {
+      padding: 1.5rem;
+    }
+
+    .validation-card .card-body p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .validation-card .specs {
+      list-style: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .validation-card .specs li {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(232, 230, 225, 0.05);
+    }
+
+    .validation-card .specs li:last-child {
+      border-bottom: none;
+    }
+
+    /* Trust section */
+    .trust-section {
+      background: linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-surface) 50%, var(--bg-deep) 100%);
+    }
+
+    .trust-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+
+    .trust-list {
+      list-style: none;
+      margin-top: 2rem;
+    }
+
+    .trust-list li {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid rgba(232, 230, 225, 0.08);
+      color: var(--text-secondary);
+    }
+
+    .trust-list li::before {
+      content: '✓';
+      color: var(--accent-teal);
+      font-weight: 700;
+    }
+
+    .trust-visual {
+      background: var(--bg-panel);
+      border: 1px solid rgba(244, 162, 97, 0.15);
+      border-radius: 8px;
+      padding: 2rem;
+      position: relative;
+      min-height: 320px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .trust-visual .terminal-header {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .trust-visual .terminal-header span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .trust-visual .terminal-header span:nth-child(1) { background: var(--accent-red); }
+    .trust-visual .terminal-header span:nth-child(2) { background: var(--accent-amber); }
+    .trust-visual .terminal-header span:nth-child(3) { background: var(--accent-teal); }
+
+    .trust-visual pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      overflow-x: auto;
+    }
+
+    .trust-visual pre .prompt { color: var(--accent-teal); }
+    .trust-visual pre .success { color: var(--accent-teal); }
+    .trust-visual pre .warn { color: var(--accent-amber); }
+    .trust-visual pre .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1em;
+      background: var(--accent-amber);
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* Footer / CTA */
+    footer {
+      padding: 6rem 4vw;
+      text-align: center;
+      border-top: 1px solid rgba(232, 230, 225, 0.08);
+    }
+
+    footer h2 {
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      margin-bottom: 1rem;
+    }
+
+    footer p {
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 3rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent-amber);
+    }
+
+    /* Scroll reveal */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .hero {
+        grid-template-columns: 1fr;
+        padding-top: 6rem;
+      }
+      .hero-visual {
+        height: 400px;
+      }
+      .planes, .trust-content {
+        grid-template-columns: 1fr;
+      }
+      .problem-grid, .features, .validation-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .problem-grid, .features, .validation-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero h1 {
+        font-size: 2.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="scanlines"></div>
+  <div class="grid-bg"></div>
+
+  <nav>
+    <a href="#" class="logo">RETURN42</a>
+    <ul class="nav-links">
+      <li><a href="#problem">Problem</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#trust">Trust</a></li>
+    </ul>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-content">
+      <div class="status-pill">System operational — local mesh active</div>
+      <h1>
+        Resilient Edge Communication
+        <span>Local-first mesh · Trust-gated bridge · SIP fallback</span>
+      </h1>
+      <p>
+        A sovereign communication substrate for edge devices. XIAO SOM nodes form a self-healing local mesh, authenticate through a GSS trust plane, and bridge to external SIP infrastructure only when policy and trust allow.
+      </p>
+      <div class="cta-group">
+        <a href="#architecture" class="btn btn-primary">Explore the architecture</a>
+        <a href="../docs/superpowers/specs/2026-07-15-resilient-edge-communication-architecture.md" class="btn btn-secondary">Read the blueprint</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <canvas id="meshCanvas"></canvas>
+      <div class="visual-overlay">
+        <span>Nodes: 7</span>
+        <span>Links: 12</span>
+        <span>Latency: 42ms</span>
+      </div>
+    </div>
+  </header>
+
+  <section id="problem">
+    <span class="section-label">// Problem space</span>
+    <div class="section-header reveal">
+      <h2>Connectivity is not a guarantee</h2>
+      <p>Edge operations cannot depend on carrier networks or cloud backends. When WAN disappears, coordination must persist.</p>
+    </div>
+    <div class="problem-grid">
+      <div class="problem-card reveal">
+        <h3>WAN dependency</h3>
+        <p>Traditional IoT and telephony stacks assume continuous internet access. A single uplink failure silences the network.</p>
+      </div>
+      <div class="problem-card reveal">
+        <h3>Trust gaps</h3>
+        <p>Local devices often operate with implicit trust. Elevated operations like SIP bridging need verified identity and capability.</p>
+      </div>
+      <div class="problem-card reveal">
+        <h3>Fragile gateways</h3>
+        <p>A central bridge is a single point of failure. Without queue-and-replay, outages mean data loss.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <span class="section-label">// System architecture</span>
+    <div class="section-header reveal">
+      <h2>Four planes, one resilient system</h2>
+      <p>Each plane has a single responsibility. Trust gates separate local autonomy from elevated bridging.</p>
+    </div>
+    <div class="planes">
+      <div class="plane-card reveal">
+        <h3><span class="icon">◎</span> Local Mesh Plane</h3>
+        <p>XIAO SOM nodes discover peers, exchange heartbeats, and route control messages over local RF/Wi-Fi without WAN.</p>
+        <div class="meta">MQTT/CoAP · mTLS · mesh routing</div>
+      </div>
+      <div class="plane-card reveal">
+        <h3><span class="icon">◉</span> Trust Plane</h3>
+        <p>GSS-based identity bootstrap establishes trust levels and capability advertisements before high-risk operations.</p>
+        <div class="meta">GSS mock adapter · HMAC · capability tokens</div>
+      </div>
+      <div class="plane-card reveal">
+        <h3><span class="icon">◈</span> Gateway Plane</h3>
+        <p>NUC gateway enforces policy, buffers queued events during outages, and reconciles state on recovery.</p>
+        <div class="meta">FastAPI · policy engine · Redis Streams</div>
+      </div>
+      <div class="plane-card reveal">
+        <h3><span class="icon">◇</span> SIP Plane</h3>
+        <p>Conditional external session signaling through Asterisk or FreeSWITCH, enabled only for trusted devices and permitted carriers.</p>
+        <div class="meta">SIP/ARI · trust_level ≥ medium</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <span class="section-label">// Capabilities</span>
+    <div class="section-header reveal">
+      <h2>Built for failure, validated in the field</h2>
+      <p>Every capability is designed to degrade safely and recover automatically.</p>
+    </div>
+    <div class="features">
+      <div class="feature reveal">
+        <div class="num">01</div>
+        <h4>Auto-discovery</h4>
+        <p>Nodes join the mesh without manual pairing.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="num">02</div>
+        <h4>Queue & replay</h4>
+        <p>Events survive gateway outages and sync on recovery.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="num">03</div>
+        <h4>Signed commands</h4>
+        <p>Control messages carry identity and replay protection.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="num">04</div>
+        <h4>Telemetry bus</h4>
+        <p>Structured evidence logs for audit and diagnostics.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="validation">
+    <span class="section-label">// HIL validation</span>
+    <div class="section-header reveal">
+      <h2>Validated on real hardware</h2>
+      <p>The architecture is tested against concrete devices and failure modes.</p>
+    </div>
+    <div class="validation-grid">
+      <div class="validation-card reveal">
+        <div class="card-header">
+          <h3>XIAO SOM Nodes</h3>
+          <span class="status active">Active</span>
+        </div>
+        <div class="card-body">
+          <p>3+ SOM nodes form a local mesh and exchange authenticated messages without WAN.</p>
+          <ul class="specs">
+            <li>discovery < 500ms</li>
+            <li>heartbeat 1s interval</li>
+            <li>mesh repair < 5s</li>
+          </ul>
+        </div>
+      </div>
+      <div class="validation-card reveal">
+        <div class="card-header">
+          <h3>Pixel 9</h3>
+          <span class="status active">Active</span>
+        </div>
+        <div class="card-body">
+          <p>Unlocked/rooted device runs full SIP session signaling through the trust-gated bridge.</p>
+          <ul class="specs">
+            <li>trust bootstrap < 2s</li>
+            <li>SIP/IMS-style flow</li>
+            <li>signed test cases</li>
+          </ul>
+        </div>
+      </div>
+      <div class="validation-card reveal">
+        <div class="card-header">
+          <h3>Pixel 10</h3>
+          <span class="status pending">Pending</span>
+        </div>
+        <div class="card-body">
+          <p>Carrier-locked device validates local-only workflows where cellular provisioning is unavailable.</p>
+          <ul class="specs">
+            <li>local discovery</li>
+            <li>control UX</li>
+            <li>diagnostics viewer</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="trust" class="trust-section">
+    <div class="trust-content">
+      <div class="reveal">
+        <span class="section-label">// Security model</span>
+        <h2>Trust is earned, not assumed</h2>
+        <p>Every elevated operation is gated by a verified GSS trust context. Failure reduces the node to safe local-only mode.</p>
+        <ul class="trust-list">
+          <li>Mutual identity verification via X.509 and GSS</li>
+          <li>Integrity and replay protection on all control commands</li>
+          <li>Capability advertisement based on trust level</li>
+          <li>Automatic local-only fallback on bootstrap failure</li>
+          <li>Append-only evidence logs for audit</li>
+        </ul>
+      </div>
+      <div class="trust-visual reveal">
+        <div class="terminal-header">
+          <span></span><span></span><span></span>
+        </div>
+        <pre><span class="prompt">$</span> trust-bootstrap --peer som-03 --gateway nuc-01
+<span class="success">✓</span> gss_token verified
+<span class="success">✓</span> trust_level=medium capabilities=[mesh,gateway,sip]
+<span class="warn">!</span> sip route requires carrier allow — checking policy
+<span class="success">✓</span> policy allow: sip session initiated
+<span class="cursor"></span></pre>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="section-label">// Next steps</span>
+    <h2>Build the sovereign edge</h2>
+    <p>The architecture blueprint is sealed and ready for implementation. Start with Phase 1: Local Mesh Baseline.</p>
+    <div class="cta-group" style="justify-content: center;">
+      <a href="../docs/superpowers/specs/2026-07-15-resilient-edge-communication-architecture.md" class="btn btn-primary">Read the blueprint</a>
+      <a href="https://github.com" class="btn btn-secondary">View on GitHub</a>
+    </div>
+    <div class="footer-links">
+      <a href="../requirements.md">Requirements</a>
+      <a href="../design-spec.md">Design Spec</a>
+      <a href="../technical-spec.md">Technical Spec</a>
+      <a href="../PROJECT_SUMMARY.md">Project Summary</a>
+    </div>
+  </footer>
+
+  <script>
+    // Mesh network visualization
+    const canvas = document.getElementById('meshCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    let nodes = [];
+    let packets = [];
+
+    function resize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      canvas.width = width * window.devicePixelRatio;
+      canvas.height = height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      initNodes();
+    }
+
+    function initNodes() {
+      nodes = [];
+      const count = 7;
+      for (let i = 0; i < count; i++) {
+        nodes.push({
+          x: 0.15 + Math.random() * 0.7,
+          y: 0.15 + Math.random() * 0.7,
+          vx: (Math.random() - 0.5) * 0.0008,
+          vy: (Math.random() - 0.5) * 0.0008,
+          radius: 3 + Math.random() * 2,
+          type: i === 0 ? 'gateway' : 'node'
+        });
+      }
+    }
+
+    function updateNodes() {
+      nodes.forEach(node => {
+        node.x += node.vx;
+        node.y += node.vy;
+        if (node.x < 0.1 || node.x > 0.9) node.vx *= -1;
+        if (node.y < 0.1 || node.y > 0.9) node.vy *= -1;
+      });
+
+      // Spawn packet
+      if (Math.random() < 0.03) {
+        const source = Math.floor(Math.random() * nodes.length);
+        let target = Math.floor(Math.random() * nodes.length);
+        while (target === source) target = Math.floor(Math.random() * nodes.length);
+        packets.push({
+          source,
+          target,
+          progress: 0,
+          speed: 0.008 + Math.random() * 0.008,
+          color: Math.random() > 0.5 ? '#f4a261' : '#2a9d8f'
+        });
+      }
+
+      packets = packets.filter(p => {
+        p.progress += p.speed;
+        return p.progress < 1;
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw links
+      ctx.strokeStyle = 'rgba(244, 162, 97, 0.12)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = (nodes[i].x - nodes[j].x) * width;
+          const dy = (nodes[i].y - nodes[j].y) * height;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 220) {
+            ctx.globalAlpha = 1 - dist / 220;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x * width, nodes[i].y * height);
+            ctx.lineTo(nodes[j].x * width, nodes[j].y * height);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      // Draw packets
+      packets.forEach(p => {
+        const sx = nodes[p.source].x * width;
+        const sy = nodes[p.source].y * height;
+        const tx = nodes[p.target].x * width;
+        const ty = nodes[p.target].y * height;
+        const x = sx + (tx - sx) * p.progress;
+        const y = sy + (ty - sy) * p.progress;
+
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Draw nodes
+      nodes.forEach(node => {
+        const x = node.x * width;
+        const y = node.y * height;
+        const color = node.type === 'gateway' ? '#f4a261' : '#2a9d8f';
+
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = node.type === 'gateway' ? 20 : 12;
+        ctx.beginPath();
+        ctx.arc(x, y, node.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Ring for gateway
+        if (node.type === 'gateway') {
+          ctx.strokeStyle = 'rgba(244, 162, 97, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(x, y, node.radius + 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+
+      updateNodes();
+      requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    draw();
+
+    // Scroll reveal
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>
