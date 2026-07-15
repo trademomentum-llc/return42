@@ -46,3 +46,8 @@ class MqttTransport(MeshTransport):
             raise RuntimeError("Transport not started")
         self._handlers.append((topic, handler))
         await self._client.subscribe(topic)
+
+    async def unsubscribe(self, topic: str, handler: Handler) -> None:
+        entry = (topic, handler)
+        if entry in self._handlers:
+            self._handlers.remove(entry)

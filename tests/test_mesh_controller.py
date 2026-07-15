@@ -4,7 +4,7 @@ import pytest
 
 from return42.mesh.controller import SmeshController
 from return42.mesh.identity import NodeIdentity
-from return42.mesh.message import MessageTopic
+from return42.mesh.message import MeshMessage, MessageTopic
 from return42.mesh.transport import InMemoryTransport
 
 
@@ -28,3 +28,68 @@ async def test_controller_heartbeat_discovery():
 
     await ctrl_a.stop()
     await ctrl_b.stop()
+
+
+@pytest.mark.asyncio
+async def test_user_heartbeat_handler_is_dispatched():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    received = []
+
+    async def handler(msg: MeshMessage) -> None:
+        received.append(msg)
+
+    ctrl.on_message(MessageTopic.HEARTBEAT, handler)
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.HEARTBEAT,
+        payload={"ts": 1.0},
+    )
+    await bus.publish(msg)
+
+    assert len(received) == 1
+    assert received[0].source == "som-b"
+
+    await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_restart_does_not_duplicate_subscriptions():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    await ctrl.start()
+    await ctrl.stop()
+
+    calls = 0
+    original_on_heartbeat = ctrl._on_heartbeat
+
+    async def wrapped_on_heartbeat(msg: MeshMessage) -> None:
+        nonlocal calls
+        calls += 1
+        await original_on_heartbeat(msg)
+
+    ctrl._on_heartbeat = wrapped_on_heartbeat
+    await ctrl.start()
+
+    # There should be exactly one subscription after the restart.
+    assert bus._subscribers[MessageTopic.HEARTBEAT.value].count(ctrl._on_heartbeat) == 1
+
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.HEARTBEAT,
+        payload={"ts": 1.0},
+    )
+    await bus.publish(msg)
+
+    assert calls == 1
+    assert ctrl.peers == {"som-b"}
+
+    await ctrl.stop()

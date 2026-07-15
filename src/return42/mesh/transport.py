@@ -27,6 +27,9 @@ class MeshTransport(ABC):
     @abstractmethod
     async def subscribe(self, topic: str, handler: Handler) -> None: ...
 
+    @abstractmethod
+    async def unsubscribe(self, topic: str, handler: Handler) -> None: ...
+
 
 class InMemoryTransport(MeshTransport):
     """In-memory transport for tests and single-process sandboxes."""
@@ -50,3 +53,8 @@ class InMemoryTransport(MeshTransport):
 
     async def subscribe(self, topic: str, handler: Handler) -> None:
         self._subscribers[topic].append(handler)
+
+    async def unsubscribe(self, topic: str, handler: Handler) -> None:
+        handlers = self._subscribers.get(topic, [])
+        if handler in handlers:
+            handlers.remove(handler)

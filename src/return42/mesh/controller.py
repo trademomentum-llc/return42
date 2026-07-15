@@ -56,6 +56,9 @@ class SmeshController:
                 await self._heartbeat_task
             except asyncio.CancelledError:
                 pass
+        await self._transport.unsubscribe(MessageTopic.HEARTBEAT.value, self._on_heartbeat)
+        await self._transport.unsubscribe(MessageTopic.DISCOVERY.value, self._on_discovery)
+        await self._transport.unsubscribe(MessageTopic.COMMAND.value, self._on_command)
         await self._transport.stop()
 
     async def send(self, topic: MessageTopic, payload: dict, destination: str | None = None) -> None:
@@ -83,6 +86,7 @@ class SmeshController:
         if msg.source == self._identity.node_id:
             return
         self._peers[msg.source] = time.time()
+        await self._dispatch_user_handlers(msg.topic, msg)
 
     async def _on_discovery(self, msg: MeshMessage) -> None:
         if msg.source == self._identity.node_id:
@@ -91,9 +95,13 @@ class SmeshController:
         self._peers[msg.source] = time.time()
         if is_new:
             await self._announce()
+        await self._dispatch_user_handlers(msg.topic, msg)
 
     async def _on_command(self, msg: MeshMessage) -> None:
-        handlers = self._handlers.get(MessageTopic.COMMAND.value, [])
+        await self._dispatch_user_handlers(msg.topic, msg)
+
+    async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:
+        handlers = self._handlers.get(topic, [])
         for handler in handlers:
             await handler(msg)
 
