@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    PlatformCollector,
+    ProcessCollector,
+    generate_latest,
+)
 
 
 class MetricsRegistry:
@@ -13,6 +21,10 @@ class MetricsRegistry:
         self._counters: dict[str, Counter] = {}
         self._gauges: dict[str, Gauge] = {}
         self._histograms: dict[str, Histogram] = {}
+        # Include default Prometheus collectors so the metrics endpoint always
+        # exposes useful process/platform information (e.g. python_info).
+        PlatformCollector(registry=self._registry)
+        ProcessCollector(registry=self._registry)
 
     def counter(self, name: str, description: str, labels: tuple[str, ...] = ()) -> Counter:
         if name not in self._counters:
