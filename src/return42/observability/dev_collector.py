@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from .metrics import MetricsRegistry, get_registry
@@ -36,9 +37,13 @@ class DevelopmentCollector:
         self._registry.gauge("dev_git_files_changed", "Files changed in last commit").set(float(len(files_changed.splitlines()) if files_changed else 0))
 
     def collect_test_metrics(self, coverage_xml: str | Path | None = None) -> None:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            # Running inside a pytest test; invoking pytest again would recurse.
+            return
+
         try:
             result = subprocess.run(
-                ["python", "-m", "pytest", "-q", "--tb=no"],
+                [sys.executable, "-m", "pytest", "-q", "--tb=no"],
                 cwd=self._repo_path,
                 capture_output=True,
                 text=True,
