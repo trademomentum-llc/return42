@@ -8,6 +8,14 @@ from return42.mesh.message import MeshMessage, MessageTopic
 from return42.mesh.transport import InMemoryTransport
 
 
+async def _wait_for(predicate, timeout: float = 1.0, interval: float = 0.01):
+    deadline = asyncio.get_event_loop().time() + timeout
+    while not predicate():
+        if asyncio.get_event_loop().time() >= deadline:
+            raise TimeoutError("Predicate was not satisfied in time")
+        await asyncio.sleep(interval)
+
+
 @pytest.mark.asyncio
 async def test_controller_heartbeat_discovery():
     bus = InMemoryTransport()
@@ -20,14 +28,15 @@ async def test_controller_heartbeat_discovery():
     await ctrl_a.start()
     await ctrl_b.start()
 
-    # Wait for heartbeats to exchange
-    await asyncio.sleep(0.15)
+    try:
+        # Wait for heartbeats to exchange (deterministic).
+        await _wait_for(lambda: "som-b" in ctrl_a.peers and "som-a" in ctrl_b.peers)
 
-    assert "som-b" in ctrl_a.peers
-    assert "som-a" in ctrl_b.peers
-
-    await ctrl_a.stop()
-    await ctrl_b.stop()
+        assert "som-b" in ctrl_a.peers
+        assert "som-a" in ctrl_b.peers
+    finally:
+        await ctrl_a.stop()
+        await ctrl_b.stop()
 
 
 @pytest.mark.asyncio
