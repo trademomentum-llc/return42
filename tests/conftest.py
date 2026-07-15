@@ -1,7 +1,5 @@
 import asyncio
 
-import pytest
-
 
 async def _wait_for(predicate, timeout: float = 1.0, interval: float = 0.01):
     deadline = asyncio.get_event_loop().time() + timeout

@@ -30,6 +30,8 @@ async def main() -> None:
                 print(f"{ctrl.node_id} peers: {ctrl.peers}")
     except asyncio.CancelledError:
         pass
+    except KeyboardInterrupt:
+        pass
     finally:
         for ctrl in controllers:
             await ctrl.stop()
