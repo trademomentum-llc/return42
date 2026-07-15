@@ -84,6 +84,11 @@ r42-observe mesh-node --node-id som-01 --transport memory
 
 Mesh events received on all mesh topics are converted to telemetry events and written to the evidence log.
 
+### Phase 1 MQTT limitations
+
+- **Shared topics for directed messages.** Directed commands are published to the shared `command` topic; every subscriber receives them and filters locally based on the `destination` field. Node-scoped topics are a future improvement to reduce broker bandwidth and payload leakage.
+- **No automatic reconnect.** The MQTT transport does not implement reconnect or backoff in this baseline. A broker disconnect stops the receive loop and requires a process restart.
+
 ## Extending the suite
 
 - Add new telemetry event handlers in `src/return42/observability/telemetry.py`.

@@ -34,3 +34,19 @@ Open Grafana at http://localhost:3000 (admin/admin) and Prometheus at http://loc
 - `GET /metrics` — Prometheus exposition
 - `POST /events` — ingest telemetry event
 - `POST /dev-metrics` — collect git/test/coverage metrics
+
+## Phase 1: Local Mesh Baseline
+
+Run a 3-node sandbox:
+
+```bash
+python scripts/run_mesh_sandbox.py
+```
+
+Run a single node via CLI:
+
+```bash
+r42-observe mesh-node --node-id som-01 --transport memory
+```
+
+Mesh events received on all mesh topics are converted to telemetry events and written to the evidence log. See `docs/superpowers/plans/OBSERVABILITY_RUNBOOK.md` for Phase 1 MQTT limitations.
