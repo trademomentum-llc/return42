@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import typer
 
@@ -40,7 +41,11 @@ def mesh_node(
     node_id: str = typer.Option(..., "--node-id", help="Unique node identifier"),
     transport: str = typer.Option("memory", "--transport", help="memory or mqtt"),
     heartbeat: float = typer.Option(1.0, "--heartbeat", help="Heartbeat interval in seconds"),
-    log_dir: str = typer.Option("evidence", "--log-dir", envvar="EVIDENCE_LOG_DIR"),
+    log_dir: str = typer.Option(
+        os.getenv("EVIDENCE_LOG_DIR", "evidence"),
+        "--log-dir",
+        envvar="EVIDENCE_LOG_DIR",
+    ),
 ) -> None:
     """Run a single mesh node."""
 
