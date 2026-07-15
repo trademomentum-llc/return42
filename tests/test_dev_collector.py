@@ -2,8 +2,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from prometheus_client import CollectorRegistry
+
 from return42.observability.dev_collector import DevelopmentCollector
 from return42.observability.metrics import MetricsRegistry
+
+
+def _isolated_registry() -> MetricsRegistry:
+    return MetricsRegistry(registry=CollectorRegistry())
 
 
 def test_collect_git_metrics(tmp_path):
@@ -15,7 +21,7 @@ def test_collect_git_metrics(tmp_path):
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "test commit"], cwd=tmp_path, check=True, capture_output=True)
 
-    registry = MetricsRegistry()
+    registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     collector.collect_git_metrics()
 
@@ -32,7 +38,7 @@ def test_collect_git_metrics_missing_git(tmp_path, monkeypatch):
 
     monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", raise_file_not_found)
 
-    registry = MetricsRegistry()
+    registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     collector.collect_git_metrics()
 
@@ -41,7 +47,7 @@ def test_collect_git_metrics_missing_git(tmp_path, monkeypatch):
 
 
 def test_collect_test_metrics_runs_pytest(tmp_path):
-    registry = MetricsRegistry()
+    registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     # No pytest in empty dir; should not crash
     collector.collect_test_metrics()
@@ -65,7 +71,7 @@ def test_collect_test_metrics_uses_sys_executable(tmp_path, monkeypatch):
 
     monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
 
-    registry = MetricsRegistry()
+    registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     collector.collect_test_metrics()
 
@@ -85,9 +91,46 @@ def test_collect_test_metrics_skips_when_inside_pytest(tmp_path, monkeypatch):
 
     monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
 
-    registry = MetricsRegistry()
+    registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     collector.collect_test_metrics()
 
     assert not calls
     assert registry.get_sample_values("dev_test_runs_total") == {}
+
+
+def test_collect_test_metrics_counts_errors(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    def fake_run(cmd, **kwargs):
+        class Result:
+            stdout = "2 passed, 1 failed, 3 errors"
+            stderr = ""
+            returncode = 1
+
+        return Result()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics()
+
+    assert registry.get_sample_values("dev_test_runs_total")[("dev_test_runs_total", ())] == 1.0
+    assert registry.get_sample_values("dev_test_failures_total")[("dev_test_failures_total", ())] == 4.0
+
+
+def test_collect_test_metrics_no_metrics_when_pytest_missing(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    def raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError("pytest")
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", raise_file_not_found)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics()
+
+    assert registry.get_sample_values("dev_test_runs_total") == {}
+    assert registry.get_sample_values("dev_test_failures_total") == {}

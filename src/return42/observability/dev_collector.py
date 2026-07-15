@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .metrics import MetricsRegistry, get_registry
+
+
+@dataclass
+class RunResult:
+    """Result of a subprocess invocation."""
+
+    stdout: str
+    stderr: str
+    returncode: int | None
 
 
 class DevelopmentCollector:
@@ -17,7 +28,7 @@ class DevelopmentCollector:
         self._repo_path = Path(repo_path or os.getenv("REPO_PATH", "."))
         self._registry = registry or get_registry()
 
-    def _run(self, cmd: list[str]) -> str:
+    def _run(self, cmd: list[str]) -> RunResult:
         try:
             result = subprocess.run(
                 cmd,
@@ -26,13 +37,21 @@ class DevelopmentCollector:
                 text=True,
                 check=False,
             )
-            return result.stdout.strip()
+            return RunResult(
+                stdout=result.stdout.strip(),
+                stderr=result.stderr.strip(),
+                returncode=result.returncode,
+            )
         except FileNotFoundError:
-            return ""
+            return RunResult(stdout="", stderr="", returncode=None)
 
     def collect_git_metrics(self) -> None:
-        commit_count = self._run(["git", "rev-list", "--count", "HEAD"])
-        files_changed = self._run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "HEAD"])
+        commit_result = self._run(["git", "rev-list", "--count", "HEAD"])
+        files_result = self._run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "HEAD"])
+
+        commit_count = commit_result.stdout if commit_result.returncode is not None and commit_result.returncode == 0 else ""
+        files_changed = files_result.stdout if files_result.returncode is not None and files_result.returncode == 0 else ""
+
         self._registry.gauge("dev_git_commits_total", "Total number of commits").set(float(commit_count or 0))
         self._registry.gauge("dev_git_files_changed", "Files changed in last commit").set(float(len(files_changed.splitlines()) if files_changed else 0))
 
@@ -41,29 +60,20 @@ class DevelopmentCollector:
             # Running inside a pytest test; invoking pytest again would recurse.
             return
 
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "--tb=no"],
-                cwd=self._repo_path,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            output = result.stdout + result.stderr
-            self._registry.counter("dev_test_runs_total", "Total test runs").inc()
-            # Parse "X passed, Y failed" from pytest summary
-            failed = 0
-            for part in output.split(","):
-                part = part.strip()
-                if "failed" in part:
-                    failed = int(part.split()[0])
-            self._registry.counter("dev_test_failures_total", "Total test failures").inc(failed)
+        result = self._run([sys.executable, "-m", "pytest", "-q", "--tb=no"])
+        if result.returncode is None or result.returncode < 0:
+            # pytest is not available or was killed before it could finish.
+            return
 
-            if coverage_xml:
-                self._collect_coverage(coverage_xml)
-        except FileNotFoundError:
-            # pytest not installed in environment
-            pass
+        # pytest executed; record the run and parse the summary.
+        self._registry.counter("dev_test_runs_total", "Total test runs").inc()
+        output = f"{result.stdout}\n{result.stderr}"
+        failed = sum(int(match) for match in re.findall(r"(\d+) failed", output))
+        errors = sum(int(match) for match in re.findall(r"(\d+) errors?", output))
+        self._registry.counter("dev_test_failures_total", "Total test failures").inc(failed + errors)
+
+        if coverage_xml:
+            self._collect_coverage(coverage_xml)
 
     def _collect_coverage(self, coverage_xml: str | Path) -> None:
         xml_path = Path(coverage_xml)
