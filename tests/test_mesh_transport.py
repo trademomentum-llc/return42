@@ -20,3 +20,26 @@ async def test_in_memory_transport_delivers_message():
 
     assert len(received) == 1
     assert received[0].source == "a"
+
+
+@pytest.mark.asyncio
+async def test_in_memory_transport_continues_after_handler_error():
+    bus = InMemoryTransport()
+    await bus.start()
+    received = []
+
+    async def failing_handler(msg: MeshMessage):
+        raise RuntimeError("handler failure")
+
+    async def good_handler(msg: MeshMessage):
+        received.append(msg)
+
+    await bus.subscribe("heartbeat", failing_handler)
+    await bus.subscribe("heartbeat", good_handler)
+
+    msg = MeshMessage(source="a", topic=MessageTopic.HEARTBEAT, payload={"seq": 1})
+    await bus.publish(msg)
+    await bus.stop()
+
+    assert len(received) == 1
+    assert received[0].source == "a"

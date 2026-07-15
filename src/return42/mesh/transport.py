@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Awaitable, Callable
 
 from .message import MeshMessage
+
+logger = logging.getLogger(__name__)
 
 
 Handler = Callable[[MeshMessage], Awaitable[None]]
@@ -54,7 +57,10 @@ class InMemoryTransport(MeshTransport):
             raise RuntimeError("Transport not started")
         handlers = self._subscribers.get(message.topic, [])
         for handler in handlers:
-            await handler(message)
+            try:
+                await handler(message)
+            except Exception as exc:
+                logger.warning("Handler for topic %s raised an error: %s", message.topic, exc)
 
     async def subscribe(self, topic: str, handler: Handler) -> None:
         self._subscribers[topic].append(handler)
