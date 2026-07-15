@@ -79,7 +79,7 @@ python scripts/run_mesh_sandbox.py
 Run a single node via CLI:
 
 ```bash
-r42-observe mesh mesh-node --node-id som-01 --transport memory
+r42-observe mesh-node --node-id som-01 --transport memory
 ```
 
 Mesh events received on the `command` topic are converted to telemetry events and written to the evidence log.

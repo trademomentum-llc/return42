@@ -30,6 +30,7 @@ def _mesh_message_to_telemetry(msg: MeshMessage) -> TelemetryEvent:
             "msg_id": msg.msg_id,
             "timestamp": msg.timestamp,
             "data": msg.payload,
+            "signature": msg.signature,
         },
     )
 
