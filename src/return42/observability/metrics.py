@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from prometheus_client import (
+    REGISTRY,
     CollectorRegistry,
     Counter,
     Gauge,
@@ -16,15 +17,17 @@ from prometheus_client import (
 class MetricsRegistry:
     """Wraps prometheus_client CollectorRegistry with lazy metric creation."""
 
-    def __init__(self) -> None:
-        self._registry = CollectorRegistry()
+    def __init__(self, registry: CollectorRegistry | None = None) -> None:
+        self._registry = registry if registry is not None else REGISTRY
         self._counters: dict[str, Counter] = {}
         self._gauges: dict[str, Gauge] = {}
         self._histograms: dict[str, Histogram] = {}
-        # Include default Prometheus collectors so the metrics endpoint always
-        # exposes useful process/platform information (e.g. python_info).
-        PlatformCollector(registry=self._registry)
-        ProcessCollector(registry=self._registry)
+        # Default Prometheus collectors (python_info, process metrics, etc.) are
+        # already present on prometheus_client.REGISTRY. Custom registries used
+        # for tests need them registered explicitly.
+        if self._registry is not REGISTRY:
+            PlatformCollector(registry=self._registry)
+            ProcessCollector(registry=self._registry)
 
     def counter(self, name: str, description: str, labels: tuple[str, ...] = ()) -> Counter:
         if name not in self._counters:
