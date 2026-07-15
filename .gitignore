@@ -10,3 +10,4 @@ venv/
 *.log
 prometheus-data/
 grafana-data/
+evidence/
