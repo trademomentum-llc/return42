@@ -17,18 +17,21 @@ class DevelopmentCollector:
         self._registry = registry or get_registry()
 
     def _run(self, cmd: list[str]) -> str:
-        result = subprocess.run(
-            cmd,
-            cwd=self._repo_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout.strip()
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self._repo_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return result.stdout.strip()
+        except FileNotFoundError:
+            return ""
 
     def collect_git_metrics(self) -> None:
         commit_count = self._run(["git", "rev-list", "--count", "HEAD"])
-        files_changed = self._run(["git", "diff", "--name-only", "HEAD~1", "HEAD"])
+        files_changed = self._run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "HEAD"])
         self._registry.gauge("dev_git_commits_total", "Total number of commits").set(float(commit_count or 0))
         self._registry.gauge("dev_git_files_changed", "Files changed in last commit").set(float(len(files_changed.splitlines()) if files_changed else 0))
 

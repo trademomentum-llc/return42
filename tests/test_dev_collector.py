@@ -21,6 +21,23 @@ def test_collect_git_metrics(tmp_path):
     samples = registry.get_sample_values("dev_git_commits_total")
     assert samples[("dev_git_commits_total", ())] == 1.0
 
+    file_samples = registry.get_sample_values("dev_git_files_changed")
+    assert file_samples[("dev_git_files_changed", ())] == 1.0
+
+
+def test_collect_git_metrics_missing_git(tmp_path, monkeypatch):
+    def raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", raise_file_not_found)
+
+    registry = MetricsRegistry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_git_metrics()
+
+    assert registry.get_sample_values("dev_git_commits_total")[("dev_git_commits_total", ())] == 0.0
+    assert registry.get_sample_values("dev_git_files_changed")[("dev_git_files_changed", ())] == 0.0
+
 
 def test_collect_test_metrics_runs_pytest(tmp_path):
     registry = MetricsRegistry()
