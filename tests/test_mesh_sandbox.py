@@ -1,19 +1,10 @@
-import asyncio
-
 import pytest
 
 from return42.mesh.controller import SmeshController
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.message import MessageTopic
 from return42.mesh.transport import InMemoryTransport
-
-
-async def _wait_for(predicate, timeout: float = 1.0, interval: float = 0.01):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while not predicate():
-        if asyncio.get_event_loop().time() >= deadline:
-            raise TimeoutError("Predicate was not satisfied in time")
-        await asyncio.sleep(interval)
+from tests.conftest import _wait_for
 
 
 @pytest.mark.asyncio

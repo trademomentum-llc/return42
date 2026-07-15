@@ -82,7 +82,7 @@ Run a single node via CLI:
 r42-observe mesh-node --node-id som-01 --transport memory
 ```
 
-Mesh events received on the `command` topic are converted to telemetry events and written to the evidence log.
+Mesh events received on all mesh topics are converted to telemetry events and written to the evidence log.
 
 ## Extending the suite
 

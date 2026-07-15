@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +22,6 @@ class MeshMessage(BaseModel):
     source: str
     destination: str | None = None  # None = broadcast
     topic: MessageTopic
-    payload: dict = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     timestamp: float = Field(default_factory=time.time)
     signature: str | None = None
