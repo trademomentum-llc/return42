@@ -5,12 +5,12 @@ from return42.observability.cli import app
 runner = CliRunner()
 
 
-def test_emit_event(tmp_path):
-    import os
-    os.environ["EVIDENCE_LOG_DIR"] = str(tmp_path)
+def test_emit_event(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_LOG_DIR", str(tmp_path))
     result = runner.invoke(app, ["emit-event", "cli.test", "--source", "test", "--payload", '{"n":1}'])
     assert result.exit_code == 0
     assert "accepted" in result.output
+    assert list(tmp_path.glob("evidence-*.jsonl"))
 
 
 def test_dev_metrics():

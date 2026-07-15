@@ -22,7 +22,11 @@ def emit_event(
     source: str = "cli",
     level: EventLevel = EventLevel.INFO,
     payload: str = "{}",
-    log_dir: str = os.getenv("EVIDENCE_LOG_DIR", "evidence"),
+    log_dir: str = typer.Option(
+        os.getenv("EVIDENCE_LOG_DIR", "evidence"),
+        envvar="EVIDENCE_LOG_DIR",
+        help="Evidence log directory",
+    ),
 ):
     """Emit a telemetry event and write it to evidence log."""
     logger = EvidenceLogger(log_dir=log_dir)
@@ -51,7 +55,11 @@ def dev_metrics(
 def serve(
     host: str = "0.0.0.0",
     port: int = 8000,
-    log_dir: str = os.getenv("EVIDENCE_LOG_DIR", "evidence"),
+    log_dir: str = typer.Option(
+        os.getenv("EVIDENCE_LOG_DIR", "evidence"),
+        envvar="EVIDENCE_LOG_DIR",
+        help="Evidence log directory",
+    ),
 ):
     """Run the observability API server."""
     api = create_app(log_dir=log_dir)

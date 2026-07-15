@@ -44,7 +44,7 @@ r42-observe dev-metrics
 r42-observe serve
 ```
 
-The server listens on `http://127.0.0.1:8000` by default.
+The server listens on `http://0.0.0.0:8000` by default.
 
 ## API endpoints
 
