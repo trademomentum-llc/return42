@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from typing import Awaitable, Callable
 
@@ -54,13 +55,13 @@ class SmeshController:
         if self._running:
             raise RuntimeError("Controller already started")
 
-        await self._transport.start()
-        await self._transport.subscribe(MessageTopic.HEARTBEAT.value, self._on_heartbeat)
-        await self._transport.subscribe(MessageTopic.DISCOVERY.value, self._on_discovery)
-        await self._transport.subscribe(MessageTopic.COMMAND.value, self._on_command)
-
         self._running = True
         try:
+            await self._transport.start()
+            await self._transport.subscribe(MessageTopic.HEARTBEAT.value, self._on_heartbeat)
+            await self._transport.subscribe(MessageTopic.DISCOVERY.value, self._on_discovery)
+            await self._transport.subscribe(MessageTopic.COMMAND.value, self._on_command)
+
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             await self._announce()
         except Exception:
@@ -150,7 +151,10 @@ class SmeshController:
             return
         handlers = self._handlers.get(topic, [])
         for handler in handlers:
-            await handler(msg)
+            if inspect.iscoroutinefunction(handler):
+                await handler(msg)
+            else:
+                handler(msg)
 
     def _emit_telemetry(self, name: str, payload: dict) -> None:
         event = TelemetryEvent(
