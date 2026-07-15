@@ -33,8 +33,9 @@ class MqttTransport(MeshTransport):
         return MeshMessage.model_validate_json(data)
 
     async def start(self) -> None:
-        self._client = Client(hostname=self._host, port=self._port)
-        await self._client.__aenter__()
+        client = Client(hostname=self._host, port=self._port)
+        await client.__aenter__()
+        self._client = client
         # Subscribe any handlers registered before start.
         for topic, _ in self._handlers:
             await self._client.subscribe(topic)

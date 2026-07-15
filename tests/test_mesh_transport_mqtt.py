@@ -88,3 +88,25 @@ async def test_mqtt_transport_receive_dispatches_to_handlers(monkeypatch):
     assert any(m.topic == MessageTopic.COMMAND for _, m in received)
     assert "heartbeat" in fake_client.subscriptions
     assert "command" in fake_client.subscriptions
+
+
+@pytest.mark.asyncio
+async def test_mqtt_transport_start_failure_leaves_client_none(monkeypatch):
+    class FailingClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            raise RuntimeError("connection refused")
+
+        async def __aexit__(self, *args):
+            return False
+
+    monkeypatch.setattr("return42.mesh.transport_mqtt.Client", FailingClient)
+
+    transport = MqttTransport(host="127.0.0.1", port=1883, node_id="test")
+    with pytest.raises(RuntimeError, match="connection refused"):
+        await transport.start()
+
+    assert transport._client is None
+    assert transport._receive_task is None
