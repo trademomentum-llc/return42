@@ -123,6 +123,57 @@ async def test_stop_is_idempotent():
 
 
 @pytest.mark.asyncio
+async def test_start_failure_invokes_stop(monkeypatch):
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    async def failing_start() -> None:
+        raise RuntimeError("transport start failed")
+
+    monkeypatch.setattr(bus, "start", failing_start)
+
+    stop_calls = []
+    original_stop = bus.stop
+
+    async def spied_stop() -> None:
+        stop_calls.append(1)
+        await original_stop()
+
+    monkeypatch.setattr(bus, "stop", spied_stop)
+
+    with pytest.raises(RuntimeError, match="transport start failed"):
+        await ctrl.start()
+
+    assert len(stop_calls) == 1
+    assert not ctrl._running
+
+
+@pytest.mark.asyncio
+async def test_sync_user_handler_is_dispatched():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    received = []
+    ctrl.on_message(MessageTopic.COMMAND, lambda msg: received.append(msg))
+
+    await ctrl.start()
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.COMMAND,
+        payload={"action": "ping"},
+    )
+    await bus.publish(msg)
+
+    assert len(received) == 1
+    assert received[0].source == "som-b"
+
+    await ctrl.stop()
+
+
+@pytest.mark.asyncio
 async def test_peer_expires_after_timeout():
     bus = InMemoryTransport()
     node = NodeIdentity.generate("som-a")
@@ -152,8 +203,14 @@ async def test_directed_command_only_delivered_to_destination():
     received_by_a = []
     received_by_b = []
 
-    ctrl_a.on_message(MessageTopic.COMMAND, lambda msg: received_by_a.append(msg))
-    ctrl_b.on_message(MessageTopic.COMMAND, lambda msg: received_by_b.append(msg))
+    async def handler_a(msg: MeshMessage) -> None:
+        received_by_a.append(msg)
+
+    async def handler_b(msg: MeshMessage) -> None:
+        received_by_b.append(msg)
+
+    ctrl_a.on_message(MessageTopic.COMMAND, handler_a)
+    ctrl_b.on_message(MessageTopic.COMMAND, handler_b)
 
     await ctrl_a.start()
     await ctrl_b.start()

@@ -5,6 +5,7 @@ import pytest
 
 from return42.mesh.message import MeshMessage, MessageTopic
 from return42.mesh.transport_mqtt import MqttTransport
+from tests.conftest import _wait_for
 
 
 @pytest.mark.asyncio
@@ -16,14 +17,6 @@ async def test_mqtt_transport_serialization():
     assert decoded.source == "a"
     assert decoded.topic == MessageTopic.HEARTBEAT
     assert decoded.payload == {"seq": 1}
-
-
-async def _wait_for(predicate, timeout: float = 1.0, interval: float = 0.01):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while not predicate():
-        if asyncio.get_event_loop().time() >= deadline:
-            raise TimeoutError("Predicate was not satisfied in time")
-        await asyncio.sleep(interval)
 
 
 @pytest.mark.asyncio
