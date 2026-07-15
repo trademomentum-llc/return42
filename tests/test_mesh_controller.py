@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -6,14 +7,7 @@ from return42.mesh.controller import SmeshController
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.message import MeshMessage, MessageTopic
 from return42.mesh.transport import InMemoryTransport
-
-
-async def _wait_for(predicate, timeout: float = 1.0, interval: float = 0.01):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while not predicate():
-        if asyncio.get_event_loop().time() >= deadline:
-            raise TimeoutError("Predicate was not satisfied in time")
-        await asyncio.sleep(interval)
+from tests.conftest import _wait_for
 
 
 @pytest.mark.asyncio
@@ -100,3 +94,81 @@ async def test_restart_does_not_duplicate_subscriptions():
     assert ctrl.peers == {"som-b"}
 
     await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_raises_when_already_running():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    await ctrl.start()
+    try:
+        with pytest.raises(RuntimeError, match="Controller already started"):
+            await ctrl.start()
+    finally:
+        await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_is_idempotent():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    await ctrl.start()
+    await ctrl.stop()
+    # A second stop should be a no-op, not raise.
+    await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_peer_expires_after_timeout():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    heartbeat_interval = 0.05
+    peer_timeout = 0.1
+    ctrl = SmeshController(node, bus, heartbeat_interval=heartbeat_interval, peer_timeout=peer_timeout)
+
+    await ctrl.start()
+    try:
+        # Inject a peer with a stale timestamp.
+        ctrl._peers["stale-node"] = time.time() - 2 * peer_timeout
+        await _wait_for(lambda: "stale-node" not in ctrl._peers, timeout=0.5)
+        assert "stale-node" not in ctrl.peers
+    finally:
+        await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_directed_command_only_delivered_to_destination():
+    bus = InMemoryTransport()
+    node_a = NodeIdentity.generate("som-a")
+    node_b = NodeIdentity.generate("som-b")
+
+    ctrl_a = SmeshController(node_a, bus, heartbeat_interval=0.05)
+    ctrl_b = SmeshController(node_b, bus, heartbeat_interval=0.05)
+
+    received_by_a = []
+    received_by_b = []
+
+    ctrl_a.on_message(MessageTopic.COMMAND, lambda msg: received_by_a.append(msg))
+    ctrl_b.on_message(MessageTopic.COMMAND, lambda msg: received_by_b.append(msg))
+
+    await ctrl_a.start()
+    await ctrl_b.start()
+
+    try:
+        await ctrl_a.send(
+            MessageTopic.COMMAND,
+            {"action": "ping"},
+            destination=node_b.node_id,
+        )
+
+        await _wait_for(lambda: len(received_by_b) == 1, timeout=0.5)
+        assert len(received_by_b) == 1
+        assert received_by_b[0].source == node_a.node_id
+        assert len(received_by_a) == 0
+    finally:
+        await ctrl_a.stop()
+        await ctrl_b.stop()
