@@ -98,6 +98,8 @@ class SmeshController:
         await self._dispatch_user_handlers(msg.topic, msg)
 
     async def _on_command(self, msg: MeshMessage) -> None:
+        if msg.source == self._identity.node_id:
+            return
         await self._dispatch_user_handlers(msg.topic, msg)
 
     async def _dispatch_user_handlers(self, topic: MessageTopic | str, msg: MeshMessage) -> None:
