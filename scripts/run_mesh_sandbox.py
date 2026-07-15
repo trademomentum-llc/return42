@@ -22,12 +22,12 @@ async def main() -> None:
 
     print("Sandbox running. Press Ctrl+C to stop.")
     for ctrl in controllers:
-        print(f"{ctrl._identity.node_id} peers: {ctrl.peers}")
+        print(f"{ctrl.node_id} peers: {ctrl.peers}")
     try:
         while True:
             await asyncio.sleep(5)
             for ctrl in controllers:
-                print(f"{ctrl._identity.node_id} peers: {ctrl.peers}")
+                print(f"{ctrl.node_id} peers: {ctrl.peers}")
     except asyncio.CancelledError:
         pass
     finally:

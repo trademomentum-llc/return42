@@ -36,6 +36,10 @@ class SmeshController:
         self._running = False
 
     @property
+    def node_id(self) -> str:
+        return self._identity.node_id
+
+    @property
     def peers(self) -> set[str]:
         return set(self._peers.keys())
 
@@ -86,7 +90,7 @@ class SmeshController:
         if msg.source == self._identity.node_id:
             return
         self._peers[msg.source] = time.time()
-        await self._dispatch_user_handlers(msg.topic, msg)
+        await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_discovery(self, msg: MeshMessage) -> None:
         if msg.source == self._identity.node_id:
@@ -95,14 +99,14 @@ class SmeshController:
         self._peers[msg.source] = time.time()
         if is_new:
             await self._announce()
-        await self._dispatch_user_handlers(msg.topic, msg)
+        await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_command(self, msg: MeshMessage) -> None:
         if msg.source == self._identity.node_id:
             return
-        await self._dispatch_user_handlers(msg.topic, msg)
+        await self._dispatch_user_handlers(msg.topic.value, msg)
 
-    async def _dispatch_user_handlers(self, topic: MessageTopic | str, msg: MeshMessage) -> None:
+    async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:
         handlers = self._handlers.get(topic, [])
         for handler in handlers:
             await handler(msg)
