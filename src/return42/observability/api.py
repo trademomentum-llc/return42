@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
@@ -14,19 +13,9 @@ from .metrics import get_registry
 from .telemetry import TelemetryBus, TelemetryEvent
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Emit dev metrics on startup, but skip when running under pytest to avoid
-    # recursively invoking the test suite.
-    if not os.getenv("PYTEST_CURRENT_TEST"):
-        collector = DevelopmentCollector()
-        collector.emit_all()
-    yield
-
-
 def create_app(log_dir: str | None = None) -> FastAPI:
     log_dir = log_dir or os.getenv("EVIDENCE_LOG_DIR", "evidence")
-    app = FastAPI(title="Return42 Observability", lifespan=lifespan)
+    app = FastAPI(title="Return42 Observability")
     app.state.bus = TelemetryBus()
     app.state.evidence = EvidenceLogger(log_dir=log_dir)
 
