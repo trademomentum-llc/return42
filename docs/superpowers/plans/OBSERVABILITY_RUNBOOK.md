@@ -68,6 +68,22 @@ This starts Prometheus, Grafana, and the observability API.
 
 The provisioned Grafana dashboard is located at `dashboards/return42-observability.json`.
 
+## Phase 1: Local Mesh Baseline
+
+Run a 3-node sandbox:
+
+```bash
+python scripts/run_mesh_sandbox.py
+```
+
+Run a single node via CLI:
+
+```bash
+r42-observe mesh mesh-node --node-id som-01 --transport memory
+```
+
+Mesh events received on the `command` topic are converted to telemetry events and written to the evidence log.
+
 ## Extending the suite
 
 - Add new telemetry event handlers in `src/return42/observability/telemetry.py`.

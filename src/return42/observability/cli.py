@@ -8,12 +8,15 @@ import os
 import typer
 import uvicorn
 
+from return42.mesh import cli as mesh_cli
+
 from .api import create_app
 from .dev_collector import DevelopmentCollector
 from .evidence import EvidenceLogger
 from .telemetry import EventLevel, TelemetryEvent
 
 app = typer.Typer(help="Return42 observability CLI")
+app.add_typer(mesh_cli.app, name="mesh")
 
 
 @app.command()
