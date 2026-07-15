@@ -27,8 +27,13 @@ class MeshTransport(ABC):
     @abstractmethod
     async def subscribe(self, topic: str, handler: Handler) -> None: ...
 
-    @abstractmethod
-    async def unsubscribe(self, topic: str, handler: Handler) -> None: ...
+    async def unsubscribe(self, topic: str, handler: Handler) -> None:
+        """Remove a handler from a topic.
+
+        Transports that need cleanup (e.g. broker-side unsubscriptions) should
+        override this method. The default implementation is a no-op.
+        """
+        return None
 
 
 class InMemoryTransport(MeshTransport):

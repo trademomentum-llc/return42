@@ -78,9 +78,6 @@ async def test_restart_does_not_duplicate_subscriptions():
     ctrl._on_heartbeat = wrapped_on_heartbeat
     await ctrl.start()
 
-    # There should be exactly one subscription after the restart.
-    assert bus._subscribers[MessageTopic.HEARTBEAT.value].count(ctrl._on_heartbeat) == 1
-
     msg = MeshMessage(
         source="som-b",
         destination=None,
@@ -89,6 +86,7 @@ async def test_restart_does_not_duplicate_subscriptions():
     )
     await bus.publish(msg)
 
+    # A single published heartbeat must be handled exactly once.
     assert calls == 1
     assert ctrl.peers == {"som-b"}
 

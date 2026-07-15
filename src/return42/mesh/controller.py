@@ -10,7 +10,7 @@ from return42.observability.telemetry import TelemetryBus, TelemetryEvent, Event
 
 from .identity import NodeIdentity
 from .message import MeshMessage, MessageTopic
-from .transport import Handler, MeshTransport
+from .transport import MeshTransport
 
 
 MessageHandler = Callable[[MeshMessage], Awaitable[None]]
@@ -100,7 +100,7 @@ class SmeshController:
     async def _on_command(self, msg: MeshMessage) -> None:
         await self._dispatch_user_handlers(msg.topic, msg)
 
-    async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:
+    async def _dispatch_user_handlers(self, topic: MessageTopic | str, msg: MeshMessage) -> None:
         handlers = self._handlers.get(topic, [])
         for handler in handlers:
             await handler(msg)

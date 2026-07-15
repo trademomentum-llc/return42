@@ -49,5 +49,8 @@ class MqttTransport(MeshTransport):
 
     async def unsubscribe(self, topic: str, handler: Handler) -> None:
         entry = (topic, handler)
-        if entry in self._handlers:
-            self._handlers.remove(entry)
+        if entry not in self._handlers:
+            return
+        self._handlers.remove(entry)
+        if self._client is not None and not any(t == topic for t, _ in self._handlers):
+            await self._client.unsubscribe(topic)
