@@ -21,6 +21,8 @@ async def main() -> None:
         await ctrl.start()
 
     print("Sandbox running. Press Ctrl+C to stop.")
+    for ctrl in controllers:
+        print(f"{ctrl._identity.node_id} peers: {ctrl.peers}")
     try:
         while True:
             await asyncio.sleep(5)
