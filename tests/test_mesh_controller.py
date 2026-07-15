@@ -71,14 +71,15 @@ async def test_restart_does_not_duplicate_subscriptions():
     await ctrl.stop()
 
     calls = 0
-    original_on_heartbeat = ctrl._on_heartbeat
+    original_on_message = ctrl._on_message
 
-    async def wrapped_on_heartbeat(msg: MeshMessage) -> None:
+    async def wrapped_on_message(msg: MeshMessage) -> None:
         nonlocal calls
-        calls += 1
-        await original_on_heartbeat(msg)
+        if msg.source != node.node_id:
+            calls += 1
+        await original_on_message(msg)
 
-    ctrl._on_heartbeat = wrapped_on_heartbeat
+    ctrl._on_message = wrapped_on_message
     await ctrl.start()
 
     msg = MeshMessage(
@@ -229,3 +230,55 @@ async def test_directed_command_only_delivered_to_destination():
     finally:
         await ctrl_a.stop()
         await ctrl_b.stop()
+
+
+@pytest.mark.asyncio
+async def test_controller_subscribes_to_all_topics():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    subscribed_topics = []
+    original_subscribe = bus.subscribe
+
+    async def spied_subscribe(topic: str, handler) -> None:
+        subscribed_topics.append(topic)
+        await original_subscribe(topic, handler)
+
+    bus.subscribe = spied_subscribe
+
+    await ctrl.start()
+    try:
+        expected = {topic.value for topic in MessageTopic}
+        assert set(subscribed_topics) == expected
+    finally:
+        await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_telemetry_message_dispatches_user_handler():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    ctrl = SmeshController(node, bus)
+
+    received = []
+
+    async def handler(msg: MeshMessage) -> None:
+        received.append(msg)
+
+    ctrl.on_message(MessageTopic.TELEMETRY, handler)
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.TELEMETRY,
+        payload={"temp": 42.0},
+    )
+    await bus.publish(msg)
+
+    assert len(received) == 1
+    assert received[0].source == "som-b"
+    assert received[0].topic == MessageTopic.TELEMETRY
+
+    await ctrl.stop()

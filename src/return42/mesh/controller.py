@@ -58,9 +58,8 @@ class SmeshController:
         self._running = True
         try:
             await self._transport.start()
-            await self._transport.subscribe(MessageTopic.HEARTBEAT.value, self._on_heartbeat)
-            await self._transport.subscribe(MessageTopic.DISCOVERY.value, self._on_discovery)
-            await self._transport.subscribe(MessageTopic.COMMAND.value, self._on_command)
+            for topic in MessageTopic:
+                await self._transport.subscribe(topic.value, self._on_message)
 
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             await self._announce()
@@ -80,9 +79,8 @@ class SmeshController:
             except asyncio.CancelledError:
                 pass
             self._heartbeat_task = None
-        await self._transport.unsubscribe(MessageTopic.HEARTBEAT.value, self._on_heartbeat)
-        await self._transport.unsubscribe(MessageTopic.DISCOVERY.value, self._on_discovery)
-        await self._transport.unsubscribe(MessageTopic.COMMAND.value, self._on_command)
+        for topic in MessageTopic:
+            await self._transport.unsubscribe(topic.value, self._on_message)
         await self._transport.stop()
 
     async def send(self, topic: MessageTopic, payload: dict, destination: str | None = None) -> None:
@@ -120,19 +118,26 @@ class SmeshController:
     def _is_targeted_at_me(self, msg: MeshMessage) -> bool:
         return msg.destination is None or msg.destination == self._identity.node_id
 
-    async def _on_heartbeat(self, msg: MeshMessage) -> None:
+    async def _on_message(self, msg: MeshMessage) -> None:
         if not self._is_targeted_at_me(msg):
             return
         if msg.source == self._identity.node_id:
             return
+
+        if msg.topic == MessageTopic.HEARTBEAT:
+            await self._on_heartbeat(msg)
+        elif msg.topic == MessageTopic.DISCOVERY:
+            await self._on_discovery(msg)
+        elif msg.topic == MessageTopic.COMMAND:
+            await self._on_command(msg)
+        else:
+            await self._dispatch_user_handlers(msg.topic.value, msg)
+
+    async def _on_heartbeat(self, msg: MeshMessage) -> None:
         self._peers[msg.source] = time.time()
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_discovery(self, msg: MeshMessage) -> None:
-        if not self._is_targeted_at_me(msg):
-            return
-        if msg.source == self._identity.node_id:
-            return
         is_new = msg.source not in self._peers
         self._peers[msg.source] = time.time()
         if is_new:
@@ -140,10 +145,6 @@ class SmeshController:
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_command(self, msg: MeshMessage) -> None:
-        if not self._is_targeted_at_me(msg):
-            return
-        if msg.source == self._identity.node_id:
-            return
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:
