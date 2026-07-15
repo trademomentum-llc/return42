@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Return42 Observability",
+    "tags": ["return42"],
+    "timezone": "utc",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Git Commits",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "dev_git_commits_total",
+            "legendFormat": "commits"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Test Failures",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "dev_test_failures_total",
+            "legendFormat": "failures"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Coverage %",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "dev_coverage_percent",
+            "legendFormat": "coverage"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Python Info",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "python_info",
+            "legendFormat": "python"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Mesh Heartbeat Latency (placeholder)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "mesh_message_latency_ms_bucket",
+            "legendFormat": "latency"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      }
+    ],
+    "schemaVersion": 36,
+    "version": 1
+  }
+}
