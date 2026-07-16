@@ -50,3 +50,59 @@ r42-observe mesh-node --node-id som-01 --transport memory
 ```
 
 Mesh events received on all mesh topics are converted to telemetry events and written to the evidence log. See `docs/superpowers/plans/OBSERVABILITY_RUNBOOK.md` for Phase 1 MQTT limitations.
+
+## Phase 2: Trust and Authentication
+
+Each mesh node uses an Ed25519 signing key pair. The private key is loaded from `NODE_SIGNING_KEY` (URL-safe base64); the public verify key is advertised in discovery messages and used to authenticate every incoming message.
+
+### Generate a node signing key
+
+Run this once per node in the terminal where the node will run. It generates a key, exports it to the shell environment, and prints only the public verify key:
+
+```bash
+export NODE_SIGNING_KEY="$(python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+import os
+identity = NodeIdentity.from_env(persist_ephemeral=True)
+print(os.environ["NODE_SIGNING_KEY"])
+PY
+)"
+export NODE_ID=som-01
+python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+print(NodeIdentity.from_env().verify_key_b64)
+PY
+```
+
+Copy the printed verify key and share it with peers out-of-band. Never share or log the value of `NODE_SIGNING_KEY`.
+
+### Run two nodes with pre-shared trust
+
+Start the first node after generating its key, then start the second node with `--trusted-peers` set to the first node's verify key:
+
+```bash
+# Terminal 1 (som-01)
+export NODE_ID=som-01
+export NODE_SIGNING_KEY="<som-01-private-key>"
+r42-observe mesh-node --node-id som-01 --transport memory
+
+# Terminal 2 (som-02)
+export NODE_ID=som-02
+export NODE_SIGNING_KEY="<som-02-private-key>"
+r42-observe mesh-node \
+  --node-id som-02 \
+  --transport memory \
+  --trusted-peers "som-01:<som-01-verify-key>"
+```
+
+For bidirectional command handling, both nodes must trust each other. Use `TRUSTED_PEERS=som-01:<key>,som-02:<key>` or `--trusted-peers` on each side.
+
+### Run the sandbox with trust-on-first-use
+
+For local development, the sandbox can trust peers on first discovery (TOFU):
+
+```bash
+python scripts/run_mesh_sandbox.py --trust-on-first-use
+```
+
+TOFU is convenient for sandboxing but should not be used in production.

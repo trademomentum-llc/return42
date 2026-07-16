@@ -89,6 +89,67 @@ Mesh events received on all mesh topics are converted to telemetry events and wr
 - **Shared topics for directed messages.** Directed commands are published to the shared `command` topic; every subscriber receives them and filters locally based on the `destination` field. Node-scoped topics are a future improvement to reduce broker bandwidth and payload leakage.
 - **No automatic reconnect.** The MQTT transport does not implement reconnect or backoff in this baseline. A broker disconnect stops the receive loop and requires a process restart.
 
+## Phase 2: Trust and Authentication
+
+Each mesh node uses an Ed25519 signing key pair. Messages are signed before publish and verified on receipt; unsigned or forged messages are dropped. `COMMAND` messages are only dispatched from peers that are trusted. Trust can be established by pre-enrollment (`TRUSTED_PEERS` / `--trusted-peers`) or by opt-in trust-on-first-use (`TRUST_ON_FIRST_USE=1` / `--trust-on-first-use`).
+
+### Generate a node signing key
+
+Generate a key and load it into the current shell environment. The example prints only the public verify key; keep `NODE_SIGNING_KEY` secret.
+
+```bash
+export NODE_SIGNING_KEY="$(python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+import os
+identity = NodeIdentity.from_env(persist_ephemeral=True)
+print(os.environ["NODE_SIGNING_KEY"])
+PY
+)"
+export NODE_ID=som-01
+python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+print(NodeIdentity.from_env().verify_key_b64)
+PY
+```
+
+### Run two nodes with pre-shared trust
+
+```bash
+# Terminal 1
+export NODE_ID=som-01
+export NODE_SIGNING_KEY="<som-01-private-key>"
+r42-observe mesh-node --node-id som-01 --transport memory
+
+# Terminal 2
+export NODE_ID=som-02
+export NODE_SIGNING_KEY="<som-02-private-key>"
+r42-observe mesh-node \
+  --node-id som-02 \
+  --transport memory \
+  --trusted-peers "som-01:<som-01-verify-key>"
+```
+
+For bidirectional command handling, configure `--trusted-peers` on both sides.
+
+### Run the sandbox with trust-on-first-use
+
+```bash
+python scripts/run_mesh_sandbox.py --trust-on-first-use
+```
+
+TOFU is intended for local sandbox use only.
+
+### Trust and security metrics
+
+The mesh exposes the following Prometheus metrics. The Grafana dashboard at `dashboards/return42-observability.json` includes panels for them.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `mesh_signature_verifications_total` | counter | `valid=true\|false` | Signature verification attempts |
+| `mesh_signature_failures_total` | counter | — | Messages dropped due to invalid signature |
+| `mesh_command_rejections_total` | counter | `reason=...` | Commands rejected (e.g., untrusted source) |
+| `mesh_peer_trust_state` | gauge | `node_id`, `level=trusted\|untrusted` | Per-peer trust state |
+
 ## Extending the suite
 
 - Add new telemetry event handlers in `src/return42/observability/telemetry.py`.

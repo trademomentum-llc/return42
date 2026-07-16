@@ -140,6 +140,46 @@
           }
         ],
         "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16}
+      },
+      {
+        "id": 9,
+        "title": "Signature Verifications",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(mesh_signature_verifications_total) by (valid)",
+            "legendFormat": "valid={{valid}}"
+          },
+          {
+            "expr": "mesh_signature_failures_total",
+            "legendFormat": "failures"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24}
+      },
+      {
+        "id": 10,
+        "title": "Command Rejections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(mesh_command_rejections_total) by (reason)",
+            "legendFormat": "{{reason}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24}
+      },
+      {
+        "id": 11,
+        "title": "Peer Trust State",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "mesh_peer_trust_state",
+            "legendFormat": "{{node_id}} ({{level}})"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24}
       }
     ],
     "schemaVersion": 36,
