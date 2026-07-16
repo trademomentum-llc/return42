@@ -198,15 +198,6 @@ class SmeshController:
         if msg.source == self._identity.node_id:
             return
 
-        self._received_counter.labels(
-            node_id=self.node_id,
-            topic=msg.topic.value,
-        ).inc()
-        self._emit_telemetry(
-            "mesh.message.received",
-            {"topic": msg.topic.value, "source": msg.source, "destination": msg.destination},
-        )
-
         verify_key_b64 = self._resolve_verify_key(msg)
         if verify_key_b64 is None:
             self._signature_verifications_counter.labels(valid="false").inc()
@@ -228,6 +219,16 @@ class SmeshController:
             return
 
         self._signature_verifications_counter.labels(valid="true").inc()
+
+        # Only count/emit "received" after the signature has been verified.
+        self._received_counter.labels(
+            node_id=self.node_id,
+            topic=msg.topic.value,
+        ).inc()
+        self._emit_telemetry(
+            "mesh.message.received",
+            {"topic": msg.topic.value, "source": msg.source, "destination": msg.destination},
+        )
 
         if msg.topic == MessageTopic.COMMAND:
             await self._on_command(msg)

@@ -41,14 +41,17 @@ async def test_received_message_metric():
     registry = MetricsRegistry(registry=CollectorRegistry())
     ctrl = SmeshController(node, bus, registry=registry)
 
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
+
     await ctrl.start()
     try:
         msg = MeshMessage(
-            source="som-b",
+            source=sender.node_id,
             destination=None,
             topic=MessageTopic.HEARTBEAT,
             payload={"ts": 1.0},
-        )
+        ).sign(sender)
         await bus.publish(msg)
     finally:
         await ctrl.stop()
@@ -90,14 +93,17 @@ async def test_received_telemetry_event():
     telemetry = TelemetryBus()
     ctrl = SmeshController(node, bus, telemetry_bus=telemetry)
 
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
+
     await ctrl.start()
     try:
         msg = MeshMessage(
-            source="som-b",
+            source=sender.node_id,
             destination=None,
             topic=MessageTopic.COMMAND,
             payload={"action": "ping"},
-        )
+        ).sign(sender)
         await bus.publish(msg)
     finally:
         await ctrl.stop()
@@ -105,4 +111,4 @@ async def test_received_telemetry_event():
     events = telemetry.events("mesh.message.received")
     assert len(events) == 1
     assert events[0].payload["topic"] == "command"
-    assert events[0].payload["source"] == "som-b"
+    assert events[0].payload["source"] == sender.node_id
