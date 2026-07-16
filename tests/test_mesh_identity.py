@@ -31,11 +31,20 @@ def test_identity_sign_and_verify():
     assert node.verify(b"tampered", sig) is False
 
 
-def test_identity_from_env():
+def test_identity_from_env(monkeypatch):
     node = NodeIdentity.generate("som-a")
-    os.environ["NODE_SIGNING_KEY"] = node.signing_key_b64
+    monkeypatch.setenv("NODE_SIGNING_KEY", node.signing_key_b64)
     loaded = NodeIdentity.from_env("som-a")
     assert loaded.verify_key_b64 == node.verify_key_b64
+
+
+def test_identity_from_env_persists_ephemeral_key(monkeypatch):
+    monkeypatch.delenv("NODE_SIGNING_KEY", raising=False)
+    identity = NodeIdentity.from_env("som-a")
+    assert os.environ["NODE_SIGNING_KEY"] == identity.signing_key_b64
+    reloaded = NodeIdentity.from_env("som-a")
+    assert reloaded.signing_key_b64 == identity.signing_key_b64
+    assert reloaded.verify_key_b64 == identity.verify_key_b64
 
 
 def test_identity_key_types_and_serialization():

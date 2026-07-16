@@ -6,6 +6,7 @@ import base64
 import os
 from dataclasses import dataclass, field
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -56,8 +57,13 @@ class NodeIdentity:
     @property
     def signing_key(self) -> Ed25519PrivateKey:
         """The cached Ed25519 private key."""
+        cached = getattr(self, "_cached_signing_key", None)
+        if cached is not None:
+            return cached
         signing_bytes = base64.urlsafe_b64decode(self._signing_key_b64)
-        return Ed25519PrivateKey.from_private_bytes(signing_bytes)
+        key = Ed25519PrivateKey.from_private_bytes(signing_bytes)
+        object.__setattr__(self, "_cached_signing_key", key)
+        return key
 
     @property
     def signing_key_b64(self) -> str:
@@ -66,8 +72,13 @@ class NodeIdentity:
 
     @property
     def verify_key(self) -> Ed25519PublicKey:
-        """The Ed25519 public key derived from the private key."""
-        return self.signing_key.public_key()
+        """The cached Ed25519 public key derived from the private key."""
+        cached = getattr(self, "_cached_verify_key", None)
+        if cached is not None:
+            return cached
+        key = self.signing_key.public_key()
+        object.__setattr__(self, "_cached_verify_key", key)
+        return key
 
     def sign(self, data: bytes) -> bytes:
         """Sign ``data`` and return the raw Ed25519 signature."""
@@ -78,7 +89,7 @@ class NodeIdentity:
         try:
             self.verify_key.verify(signature, data)
             return True
-        except Exception:  # noqa: BLE001
+        except InvalidSignature:
             return False
 
     @classmethod
@@ -107,7 +118,9 @@ class NodeIdentity:
         resolved_node_id = node_id or os.getenv("NODE_ID", "anonymous")
 
         if signing_key_b64 is None:
-            return cls.generate(resolved_node_id)
+            identity = cls.generate(resolved_node_id)
+            os.environ["NODE_SIGNING_KEY"] = identity.signing_key_b64
+            return identity
 
         try:
             signing_bytes = base64.urlsafe_b64decode(signing_key_b64)
