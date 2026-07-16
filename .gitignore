@@ -11,3 +11,4 @@ venv/
 prometheus-data/
 grafana-data/
 evidence/
+.DS_Store
