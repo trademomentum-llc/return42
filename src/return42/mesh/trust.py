@@ -25,6 +25,11 @@ class TrustStore:
     def trusted_count(self) -> int:
         return len(self._trusted)
 
+    @property
+    def trusted_peers(self) -> dict[str, str]:
+        """Return a copy of the pre-enrolled trusted peer map."""
+        return {node_id: self._known[node_id] for node_id in self._trusted}
+
     def is_trusted(self, node_id: str) -> bool:
         return node_id in self._trusted
 

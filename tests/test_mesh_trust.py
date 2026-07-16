@@ -88,3 +88,17 @@ def test_trust_store_trusted_count_property():
     assert store.trusted_count == 2
     store.register("som-d", "key-d64")
     assert store.trusted_count == 3
+
+
+def test_trust_store_trusted_peers_property():
+    store = TrustStore(tofu=False, trusted_peers={"som-b": "key-b64", "som-c": "key-c64"})
+    assert store.trusted_peers == {"som-b": "key-b64", "som-c": "key-c64"}
+    # Discovered-but-not-trusted peers should not appear.
+    store.trust_from_discovery("som-d", "key-d64")
+    assert "som-d" not in store.trusted_peers
+    store.register("som-e", "key-e64")
+    assert store.trusted_peers == {
+        "som-b": "key-b64",
+        "som-c": "key-c64",
+        "som-e": "key-e64",
+    }
