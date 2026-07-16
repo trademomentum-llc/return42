@@ -24,8 +24,9 @@ _VERIFY_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PublicKey] =
 class NodeIdentity:
     """A mesh node's identity backed by an Ed25519 key pair.
 
-    The private key is stored only inside the frozen instance so that it can be
-    cached as a property; the public/verify key is exposed directly.
+    The private key is serialized inside the frozen instance and reconstructed
+    on demand via the module-level signing-key cache. The public/verify key is
+    exposed directly and cached in the same way.
     """
 
     node_id: str
@@ -101,6 +102,8 @@ class NodeIdentity:
     @classmethod
     def generate(cls, node_id: str, seed: bytes | None = None) -> "NodeIdentity":
         """Generate a new identity, optionally from a deterministic 32-byte seed."""
+        if seed is not None and len(seed) != 32:
+            raise ValueError("seed must be exactly 32 bytes")
         if seed is not None:
             signing_key = Ed25519PrivateKey.from_private_bytes(seed)
         else:
@@ -114,14 +117,16 @@ class NodeIdentity:
 
     @classmethod
     def from_env(
-        cls, node_id: str | None = None, *, persist_ephemeral: bool = False
+        cls, node_id: str | None = None, *, persist_ephemeral: bool = True
     ) -> "NodeIdentity":
         """Load a node identity from the environment.
 
         ``NODE_SIGNING_KEY`` is expected to be a URL-safe base64 encoded Ed25519
-        private key. If it is missing, an ephemeral identity is generated. The
-        ephemeral key is only written back to ``os.environ`` when
-        ``persist_ephemeral=True``. If the existing key is malformed, a clear
+        private key. If it is missing, an ephemeral identity is generated and,
+        by default, written back to ``os.environ`` under ``NODE_SIGNING_KEY``
+        so the same process (and any subsequent ``from_env`` calls) sees a stable
+        key. Production callers that must not mutate ``os.environ`` can pass
+        ``persist_ephemeral=False``. If the existing key is malformed, a clear
         :class:`ValueError` is raised.
         """
         signing_key_b64 = os.getenv("NODE_SIGNING_KEY")
