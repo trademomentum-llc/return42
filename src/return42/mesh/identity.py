@@ -117,16 +117,16 @@ class NodeIdentity:
 
     @classmethod
     def from_env(
-        cls, node_id: str | None = None, *, persist_ephemeral: bool = True
+        cls, node_id: str | None = None, *, persist_ephemeral: bool = False
     ) -> "NodeIdentity":
         """Load a node identity from the environment.
 
         ``NODE_SIGNING_KEY`` is expected to be a URL-safe base64 encoded Ed25519
-        private key. If it is missing, an ephemeral identity is generated and,
-        by default, written back to ``os.environ`` under ``NODE_SIGNING_KEY``
-        so the same process (and any subsequent ``from_env`` calls) sees a stable
-        key. Production callers that must not mutate ``os.environ`` can pass
-        ``persist_ephemeral=False``. If the existing key is malformed, a clear
+        private key. If it is missing, an ephemeral identity is generated. By
+        default the ephemeral key is **not** persisted. Persistence should only
+        be enabled by passing ``persist_ephemeral=True`` in tests or sandbox
+        environments; production callers must leave this disabled so that
+        ``os.environ`` is not mutated. If the existing key is malformed, a clear
         :class:`ValueError` is raised.
         """
         signing_key_b64 = os.getenv("NODE_SIGNING_KEY")
