@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 from enum import Enum
 
@@ -9,6 +11,38 @@ from enum import Enum
 class TrustLevel(str, Enum):
     UNTRUSTED = "untrusted"
     TRUSTED = "trusted"
+
+
+def parse_trusted_peers(raw: str) -> dict[str, str]:
+    """Parse a comma-separated ``node_id:verify_key_b64`` string.
+
+    Each verify key must be URL-safe base64 that decodes to exactly 32 bytes.
+    Raises :class:`ValueError` with the offending entry if validation fails.
+    """
+    peers: dict[str, str] = {}
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ":" not in entry:
+            raise ValueError(f"TRUSTED_PEERS entry is missing a colon: {entry!r}")
+        node_id, key = entry.split(":", 1)
+        node_id = node_id.strip()
+        key = key.strip()
+        if not node_id:
+            raise ValueError(f"TRUSTED_PEERS entry has an empty node id: {entry!r}")
+        try:
+            key_bytes = base64.urlsafe_b64decode(key)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                f"TRUSTED_PEERS entry for {node_id!r} has an invalid base64 key"
+            ) from exc
+        if len(key_bytes) != 32:
+            raise ValueError(
+                f"TRUSTED_PEERS entry for {node_id!r} key must be 32 bytes, got {len(key_bytes)}"
+            )
+        peers[node_id] = key
+    return peers
 
 
 class TrustStore:
@@ -53,12 +87,5 @@ class TrustStore:
     @classmethod
     def from_env(cls) -> "TrustStore":
         tofu = os.getenv("TRUST_ON_FIRST_USE", "false").lower() in ("1", "true", "yes")
-        raw = os.getenv("TRUSTED_PEERS", "")
-        peers: dict[str, str] = {}
-        for entry in raw.split(","):
-            entry = entry.strip()
-            if not entry:
-                continue
-            node_id, key = entry.split(":", 1)
-            peers[node_id.strip()] = key.strip()
+        peers = parse_trusted_peers(os.getenv("TRUSTED_PEERS", ""))
         return cls(tofu=tofu, trusted_peers=peers)

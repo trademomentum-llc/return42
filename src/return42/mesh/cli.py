@@ -15,7 +15,7 @@ from .identity import NodeIdentity
 from .message import MeshMessage, MessageTopic
 from .transport import InMemoryTransport
 from .transport_mqtt import MqttTransport
-from .trust import TrustStore
+from .trust import TrustStore, parse_trusted_peers
 
 app = typer.Typer(help="Return42 mesh commands")
 
@@ -44,18 +44,6 @@ def _make_evidence_handler(evidence: EvidenceLogger) -> MessageHandler:
         await asyncio.to_thread(evidence.write, _mesh_message_to_telemetry(msg))
 
     return handler
-
-
-def _parse_trusted_peers(raw: str) -> dict[str, str]:
-    """Parse a comma-separated list of ``node_id:verify_key`` entries."""
-    peers: dict[str, str] = {}
-    for entry in raw.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        peer_id, key = entry.split(":", 1)
-        peers[peer_id.strip()] = key.strip()
-    return peers
 
 
 @app.command("mesh-node")
@@ -101,7 +89,7 @@ def mesh_node(
         if trusted_peers is not None:
             trust_store = TrustStore(
                 tofu=trust_store.is_tofu,
-                trusted_peers=_parse_trusted_peers(trusted_peers),
+                trusted_peers=parse_trusted_peers(trusted_peers),
             )
 
         evidence = EvidenceLogger(log_dir=log_dir)

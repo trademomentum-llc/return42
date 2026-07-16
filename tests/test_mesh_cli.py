@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import os
 import subprocess
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +15,11 @@ from return42.observability.cli import app as observability_app
 from return42.observability.evidence import EvidenceLogger
 
 runner = CliRunner()
+
+
+def _random_key() -> str:
+    """Return a URL-safe base64-encoded 32-byte key for tests."""
+    return base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
 
 
 def test_mesh_node_help():
@@ -96,44 +103,49 @@ def _run_mesh_node(args):
 
 
 def test_mesh_node_uses_trust_options():
+    key1 = _random_key()
+    key2 = _random_key()
     result, mock_controller, _ = _run_mesh_node([
         "--node-id",
         "som-a",
         "--trust-on-first-use",
         "--trusted-peers",
-        "peer1:key1,peer2:key2",
+        f"peer1:{key1},peer2:{key2}",
     ])
     assert result.exit_code == 0
     trust_store = mock_controller.call_args.kwargs["trust_store"]
     assert trust_store.is_tofu is True
     assert trust_store.is_trusted("peer1")
     assert trust_store.is_trusted("peer2")
-    assert trust_store.get_key("peer1") == "key1"
-    assert trust_store.get_key("peer2") == "key2"
+    assert trust_store.get_key("peer1") == key1
+    assert trust_store.get_key("peer2") == key2
 
 
 def test_mesh_node_trust_options_override_env(monkeypatch):
+    env_key = _random_key()
+    cli_key = _random_key()
     monkeypatch.setenv("TRUST_ON_FIRST_USE", "true")
-    monkeypatch.setenv("TRUSTED_PEERS", "env-peer:env-key")
+    monkeypatch.setenv("TRUSTED_PEERS", f"env-peer:{env_key}")
 
     result, mock_controller, _ = _run_mesh_node([
         "--node-id",
         "som-a",
         "--no-trust-on-first-use",
         "--trusted-peers",
-        "cli-peer:cli-key",
+        f"cli-peer:{cli_key}",
     ])
     assert result.exit_code == 0
     trust_store = mock_controller.call_args.kwargs["trust_store"]
     assert trust_store.is_tofu is False
     assert trust_store.is_trusted("cli-peer")
-    assert trust_store.get_key("cli-peer") == "cli-key"
+    assert trust_store.get_key("cli-peer") == cli_key
     assert not trust_store.is_trusted("env-peer")
 
 
 def test_mesh_node_falls_back_to_env_trust_settings(monkeypatch):
+    env_key = _random_key()
     monkeypatch.setenv("TRUST_ON_FIRST_USE", "true")
-    monkeypatch.setenv("TRUSTED_PEERS", "env-peer:env-key")
+    monkeypatch.setenv("TRUSTED_PEERS", f"env-peer:{env_key}")
 
     result, mock_controller, _ = _run_mesh_node([
         "--node-id",
@@ -143,7 +155,7 @@ def test_mesh_node_falls_back_to_env_trust_settings(monkeypatch):
     trust_store = mock_controller.call_args.kwargs["trust_store"]
     assert trust_store.is_tofu is True
     assert trust_store.is_trusted("env-peer")
-    assert trust_store.get_key("env-peer") == "env-key"
+    assert trust_store.get_key("env-peer") == env_key
 
 
 def test_sandbox_help_lists_trust_options():
