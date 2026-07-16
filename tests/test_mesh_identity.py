@@ -10,6 +10,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from return42.mesh.identity import NodeIdentity
 
 
+def _signing_key_b64(node: NodeIdentity) -> str:
+    """Serialize a node's private key to URL-safe base64."""
+    return NodeIdentity._serialize_key_pair(node.signing_key)[1]
+
+
 def test_node_identity_creation():
     node = NodeIdentity(node_id="som-01")
     assert node.node_id == "som-01"
@@ -33,7 +38,7 @@ def test_identity_sign_and_verify():
 
 def test_identity_from_env(monkeypatch):
     node = NodeIdentity.generate("som-a")
-    monkeypatch.setenv("NODE_SIGNING_KEY", node.signing_key_b64)
+    monkeypatch.setenv("NODE_SIGNING_KEY", _signing_key_b64(node))
     loaded = NodeIdentity.from_env("som-a")
     assert loaded.verify_key_b64 == node.verify_key_b64
 
@@ -41,9 +46,9 @@ def test_identity_from_env(monkeypatch):
 def test_identity_from_env_persists_ephemeral_key(monkeypatch):
     monkeypatch.delenv("NODE_SIGNING_KEY", raising=False)
     identity = NodeIdentity.from_env("som-a", persist_ephemeral=True)
-    assert os.environ["NODE_SIGNING_KEY"] == identity.signing_key_b64
+    assert os.environ["NODE_SIGNING_KEY"] == _signing_key_b64(identity)
     reloaded = NodeIdentity.from_env("som-a", persist_ephemeral=True)
-    assert reloaded.signing_key_b64 == identity.signing_key_b64
+    assert _signing_key_b64(reloaded) == _signing_key_b64(identity)
     assert reloaded.verify_key_b64 == identity.verify_key_b64
 
 
@@ -52,6 +57,12 @@ def test_identity_from_env_does_not_persist_ephemeral_key(monkeypatch):
     identity = NodeIdentity.from_env("som-a", persist_ephemeral=False)
     assert "NODE_SIGNING_KEY" not in os.environ
     assert identity.node_id == "som-a"
+
+
+def test_identity_from_env_default_does_not_persist(monkeypatch):
+    monkeypatch.delenv("NODE_SIGNING_KEY", raising=False)
+    NodeIdentity.from_env("som-a")
+    assert "NODE_SIGNING_KEY" not in os.environ
 
 
 def test_identity_generate_invalid_seed_length():
@@ -63,10 +74,9 @@ def test_identity_key_types_and_serialization():
     node = NodeIdentity.generate("som-b")
     assert isinstance(node.signing_key, Ed25519PrivateKey)
     assert isinstance(node.verify_key, Ed25519PublicKey)
-    assert isinstance(node.signing_key_b64, str)
     assert isinstance(node.verify_key_b64, str)
     # URL-safe base64 decodes to 32 bytes for the private key and 32 for public.
-    assert len(base64.urlsafe_b64decode(node.signing_key_b64)) == 32
+    assert len(base64.urlsafe_b64decode(_signing_key_b64(node))) == 32
     assert len(base64.urlsafe_b64decode(node.verify_key_b64)) == 32
 
 

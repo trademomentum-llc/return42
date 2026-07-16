@@ -6,7 +6,7 @@ import base64
 import binascii
 import os
 import weakref
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -24,21 +24,20 @@ _VERIFY_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PublicKey] =
 class NodeIdentity:
     """A mesh node's identity backed by an Ed25519 key pair.
 
-    The private key is serialized inside the frozen instance and reconstructed
-    on demand via the module-level signing-key cache. The public/verify key is
-    exposed directly and cached in the same way.
+    The public/verify key is carried by the frozen instance; the private
+    signing key is stored only in the module-level cache and is not part of
+    the serialized identity.
     """
 
     node_id: str
     verify_key_b64: str = ""
-    _signing_key_b64: str = field(default="", repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if not self.verify_key_b64 or not self._signing_key_b64:
+        if not self.verify_key_b64:
             signing_key = Ed25519PrivateKey.generate()
-            verify_key_b64, signing_key_b64 = self._serialize_key_pair(signing_key)
+            verify_key_b64, _ = self._serialize_key_pair(signing_key)
             object.__setattr__(self, "verify_key_b64", verify_key_b64)
-            object.__setattr__(self, "_signing_key_b64", signing_key_b64)
+            _SIGNING_KEY_CACHE[self] = signing_key
 
     @staticmethod
     def _serialize_key_pair(signing_key: Ed25519PrivateKey) -> tuple[str, str]:
@@ -65,17 +64,9 @@ class NodeIdentity:
     def signing_key(self) -> Ed25519PrivateKey:
         """The cached Ed25519 private key."""
         cached = _SIGNING_KEY_CACHE.get(self)
-        if cached is not None:
-            return cached
-        signing_bytes = base64.urlsafe_b64decode(self._signing_key_b64)
-        key = Ed25519PrivateKey.from_private_bytes(signing_bytes)
-        _SIGNING_KEY_CACHE[self] = key
-        return key
-
-    @property
-    def signing_key_b64(self) -> str:
-        """URL-safe base64 encoding of the private key."""
-        return self._signing_key_b64
+        if cached is None:
+            raise RuntimeError("private signing key is not available for this identity")
+        return cached
 
     @property
     def verify_key(self) -> Ed25519PublicKey:
@@ -108,12 +99,10 @@ class NodeIdentity:
             signing_key = Ed25519PrivateKey.from_private_bytes(seed)
         else:
             signing_key = Ed25519PrivateKey.generate()
-        verify_key_b64, signing_key_b64 = cls._serialize_key_pair(signing_key)
-        return cls(
-            node_id=node_id,
-            verify_key_b64=verify_key_b64,
-            _signing_key_b64=signing_key_b64,
-        )
+        verify_key_b64, _ = cls._serialize_key_pair(signing_key)
+        instance = cls(node_id=node_id, verify_key_b64=verify_key_b64)
+        _SIGNING_KEY_CACHE[instance] = signing_key
+        return instance
 
     @classmethod
     def from_env(
@@ -135,7 +124,7 @@ class NodeIdentity:
         if signing_key_b64 is None:
             identity = cls.generate(resolved_node_id)
             if persist_ephemeral:
-                os.environ["NODE_SIGNING_KEY"] = identity.signing_key_b64
+                os.environ["NODE_SIGNING_KEY"] = cls._serialize_key_pair(identity.signing_key)[1]
             return identity
 
         try:
@@ -147,8 +136,6 @@ class NodeIdentity:
             ) from exc
 
         verify_key_b64, _ = cls._serialize_key_pair(signing_key)
-        return cls(
-            node_id=resolved_node_id,
-            verify_key_b64=verify_key_b64,
-            _signing_key_b64=signing_key_b64,
-        )
+        identity = cls(node_id=resolved_node_id, verify_key_b64=verify_key_b64)
+        _SIGNING_KEY_CACHE[identity] = signing_key
+        return identity
