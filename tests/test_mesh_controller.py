@@ -298,7 +298,7 @@ async def test_telemetry_message_dispatches_user_handler():
 
 
 @pytest.mark.asyncio
-async def test_controller_rejects_unsigned_command():
+async def test_controller_accepts_signed_command_after_discovery():
     bus = InMemoryTransport()
     node_a = NodeIdentity.generate("som-a")
     node_b = NodeIdentity.generate("som-b")
@@ -402,6 +402,19 @@ async def test_controller_command_rejection_records_metric_and_telemetry():
     received = []
     ctrl.on_message(MessageTopic.COMMAND, lambda m: received.append(m))
     await ctrl.start()
+
+    # Discover the sender so the controller knows its key, but keep TOFU off
+    # so the peer remains untrusted.
+    discovery = MeshMessage(
+        source=sender.node_id,
+        destination=None,
+        topic=MessageTopic.DISCOVERY,
+        payload={"public_key": sender.public_key},
+    ).sign(sender)
+    await bus.publish(discovery)
+    await asyncio.sleep(0.05)
+
+    assert not ctrl._trust_store.is_trusted(sender.node_id)
 
     msg = MeshMessage(
         source=sender.node_id,

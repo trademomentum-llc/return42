@@ -86,6 +86,13 @@ class SmeshController:
 
     @property
     def mode(self) -> str:
+        """Return the controller's operating mode.
+
+        ``reduced_mode=True`` forces reduced mode regardless of trust state.
+        Otherwise, the mode follows the trust-state/TOFU rule from the brief:
+        ``full`` when TOFU is enabled or at least one peer is trusted,
+        ``reduced`` otherwise.
+        """
         if self._reduced_mode:
             return "reduced"
         if self._trust_store.is_tofu or self._trust_store.trusted_count > 0:
@@ -200,10 +207,6 @@ class SmeshController:
             {"topic": msg.topic.value, "source": msg.source, "destination": msg.destination},
         )
 
-        if msg.topic == MessageTopic.COMMAND:
-            await self._on_command(msg)
-            return
-
         verify_key_b64 = self._resolve_verify_key(msg)
         if verify_key_b64 is None:
             self._signature_verifications_counter.labels(valid="false").inc()
@@ -226,7 +229,9 @@ class SmeshController:
 
         self._signature_verifications_counter.labels(valid="true").inc()
 
-        if msg.topic == MessageTopic.HEARTBEAT:
+        if msg.topic == MessageTopic.COMMAND:
+            await self._on_command(msg)
+        elif msg.topic == MessageTopic.HEARTBEAT:
             await self._on_heartbeat(msg)
         elif msg.topic == MessageTopic.DISCOVERY:
             await self._on_discovery(msg)
@@ -278,19 +283,6 @@ class SmeshController:
             )
             return
 
-        verify_key_b64 = self._trust_store.get_key(msg.source)
-        if verify_key_b64 is None or not msg.verify(
-            NodeIdentity(node_id=msg.source, verify_key_b64=verify_key_b64)
-        ):
-            self._signature_verifications_counter.labels(valid="false").inc()
-            self._signature_failures_counter.inc()
-            self._emit_telemetry(
-                "mesh.message.signature_invalid",
-                {"topic": msg.topic.value, "source": msg.source, "reason": "bad_signature"},
-            )
-            return
-
-        self._signature_verifications_counter.labels(valid="true").inc()
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:

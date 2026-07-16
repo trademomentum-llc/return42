@@ -14,7 +14,8 @@ class TrustLevel(str, Enum):
 class TrustStore:
     def __init__(self, tofu: bool = False, trusted_peers: dict[str, str] | None = None) -> None:
         self._tofu = tofu
-        self._trusted: dict[str, str] = dict(trusted_peers or {})
+        self._known: dict[str, str] = dict(trusted_peers or {})
+        self._trusted: set[str] = set(self._known.keys())
 
     @property
     def is_tofu(self) -> bool:
@@ -29,16 +30,18 @@ class TrustStore:
 
     def get_key(self, node_id: str) -> str | None:
         """Return the stored verify key for ``node_id`` or ``None``."""
-        return self._trusted.get(node_id)
+        return self._known.get(node_id)
 
     def register(self, node_id: str, verify_key_b64: str) -> None:
-        self._trusted[node_id] = verify_key_b64
+        self._known[node_id] = verify_key_b64
+        self._trusted.add(node_id)
 
     def trust_from_discovery(self, node_id: str, verify_key_b64: str) -> bool:
-        if self._tofu:
-            self.register(node_id, verify_key_b64)
+        self._known[node_id] = verify_key_b64
+        if self._tofu or node_id in self._trusted:
+            self._trusted.add(node_id)
             return True
-        return node_id in self._trusted
+        return False
 
     @classmethod
     def from_env(cls) -> "TrustStore":
