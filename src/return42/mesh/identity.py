@@ -95,11 +95,16 @@ class NodeIdentity:
         return self.signing_key.sign(data)
 
     def verify(self, data: bytes, signature: bytes) -> bool:
-        """Return ``True`` if ``signature`` is valid for ``data``."""
+        """Return ``True`` if ``signature`` is valid for ``data``.
+
+        Any failure while reconstructing the public key or verifying the
+        signature (including a malformed ``verify_key_b64``) returns ``False``
+        instead of raising.
+        """
         try:
             self.verify_key.verify(signature, data)
             return True
-        except InvalidSignature:
+        except (InvalidSignature, ValueError, binascii.Error, TypeError):
             return False
 
     @classmethod

@@ -118,3 +118,18 @@ def test_public_only_identity_verifies_after_original_goes_out_of_scope():
     public_only = NodeIdentity(node_id="som-a", verify_key_b64=verify_key_b64)
     assert public_only.verify(b"hello mesh", signature) is True
     assert public_only.verify(b"tampered", signature) is False
+
+
+def test_verify_returns_false_for_malformed_public_key():
+    """A reconstructed identity with an invalid verify key must not crash verify()."""
+    node = NodeIdentity(node_id="som-a", verify_key_b64="not-valid-base64!!!")
+    assert node.verify(b"data", b"signature") is False
+
+
+def test_verify_returns_false_for_wrong_length_public_key():
+    """A verify key that is valid base64 but not 32 bytes must not crash verify()."""
+    node = NodeIdentity(
+        node_id="som-a",
+        verify_key_b64=base64.urlsafe_b64encode(b"not-32-bytes").decode("ascii"),
+    )
+    assert node.verify(b"data", b"signature") is False
