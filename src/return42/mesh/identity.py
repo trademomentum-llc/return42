@@ -20,7 +20,7 @@ _SIGNING_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PrivateKey]
 _VERIFY_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PublicKey] = weakref.WeakKeyDictionary()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class NodeIdentity:
     """A mesh node's identity backed by an Ed25519 key pair.
 
@@ -70,11 +70,23 @@ class NodeIdentity:
 
     @property
     def verify_key(self) -> Ed25519PublicKey:
-        """The cached Ed25519 public key derived from the private key."""
+        """The Ed25519 public key for this identity.
+
+        Derived from the cached private key when available, otherwise
+        reconstructed from :attr:`verify_key_b64` so public-only identities
+        can still verify signatures.
+        """
         cached = _VERIFY_KEY_CACHE.get(self)
         if cached is not None:
             return cached
-        key = self.signing_key.public_key()
+
+        signing_key = _SIGNING_KEY_CACHE.get(self)
+        if signing_key is not None:
+            key = signing_key.public_key()
+        else:
+            verify_bytes = base64.urlsafe_b64decode(self.verify_key_b64)
+            key = Ed25519PublicKey.from_public_bytes(verify_bytes)
+
         _VERIFY_KEY_CACHE[self] = key
         return key
 

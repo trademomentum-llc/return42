@@ -84,3 +84,37 @@ def test_identity_from_env_malformed(monkeypatch):
     monkeypatch.setenv("NODE_SIGNING_KEY", "not-valid-base64!!!")
     with pytest.raises(ValueError, match="NODE_SIGNING_KEY"):
         NodeIdentity.from_env("som-c")
+
+
+def test_reconstructed_identity_cannot_sign():
+    """Value-equal reconstructed identities must not share the private key cache."""
+    original = NodeIdentity.generate("som-a")
+    reconstructed = NodeIdentity(
+        node_id=original.node_id, verify_key_b64=original.verify_key_b64
+    )
+
+    assert original.signing_key is not None
+    assert original != reconstructed
+    with pytest.raises(RuntimeError, match="private signing key"):
+        reconstructed.signing_key
+    with pytest.raises(RuntimeError, match="private signing key"):
+        reconstructed.sign(b"data")
+
+
+def test_public_only_identity_verifies_after_original_goes_out_of_scope():
+    """A public-only identity can verify signatures after the original dies."""
+    verify_key_b64: str
+    signature: bytes
+
+    def _create_and_sign() -> tuple[str, bytes]:
+        original = NodeIdentity.generate("som-a")
+        data = b"hello mesh"
+        sig = original.sign(data)
+        assert original.verify(data, sig) is True
+        return original.verify_key_b64, sig
+
+    verify_key_b64, signature = _create_and_sign()
+
+    public_only = NodeIdentity(node_id="som-a", verify_key_b64=verify_key_b64)
+    assert public_only.verify(b"hello mesh", signature) is True
+    assert public_only.verify(b"tampered", signature) is False
