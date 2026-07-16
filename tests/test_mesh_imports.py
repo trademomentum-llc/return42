@@ -5,3 +5,5 @@ def test_mesh_package_imports():
     import return42.mesh.transport
     import return42.mesh.controller
     import return42.mesh.trust
+    import return42.mesh.cli
+    import return42.mesh.transport_mqtt
