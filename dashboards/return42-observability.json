@@ -104,6 +104,42 @@
           }
         ],
         "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Mesh Messages Sent",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(mesh_messages_sent_total) by (topic, destination_type)",
+            "legendFormat": "{{topic}} ({{destination_type}})"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Mesh Messages Received",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(mesh_messages_received_total) by (topic)",
+            "legendFormat": "{{topic}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Mesh Peers",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "mesh_peers_count",
+            "legendFormat": "{{node_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16}
       }
     ],
     "schemaVersion": 36,

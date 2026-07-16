@@ -7,6 +7,7 @@ import inspect
 import time
 from typing import Awaitable, Callable
 
+from return42.observability.metrics import MetricsRegistry, get_registry
 from return42.observability.telemetry import TelemetryBus, TelemetryEvent, EventLevel
 
 from .identity import NodeIdentity
@@ -27,12 +28,29 @@ class SmeshController:
         heartbeat_interval: float = 1.0,
         peer_timeout: float | None = None,
         telemetry_bus: TelemetryBus | None = None,
+        registry: MetricsRegistry | None = None,
     ) -> None:
         self._identity = identity
         self._transport = transport
         self._heartbeat_interval = heartbeat_interval
         self._peer_timeout = peer_timeout if peer_timeout is not None else 3 * heartbeat_interval
         self._telemetry = telemetry_bus or TelemetryBus()
+        self._registry = registry or get_registry()
+        self._sent_counter = self._registry.counter(
+            "mesh_messages_sent_total",
+            "Total mesh messages published by this node",
+            ("node_id", "topic", "destination_type"),
+        )
+        self._received_counter = self._registry.counter(
+            "mesh_messages_received_total",
+            "Total mesh messages received by this node",
+            ("node_id", "topic"),
+        )
+        self._peer_gauge = self._registry.gauge(
+            "mesh_peers_count",
+            "Number of known non-stale peers",
+            ("node_id",),
+        )
         self._peers: dict[str, float] = {}
         self._handlers: dict[str, list[MessageHandler]] = {}
         self._heartbeat_task: asyncio.Task | None = None
@@ -91,6 +109,12 @@ class SmeshController:
             payload=payload,
         )
         await self._transport.publish(msg)
+        destination_type = "direct" if destination else "broadcast"
+        self._sent_counter.labels(
+            node_id=self.node_id,
+            topic=topic.value,
+            destination_type=destination_type,
+        ).inc()
         self._emit_telemetry("mesh.message.sent", {"topic": topic.value, "destination": destination})
 
     def on_message(self, topic: MessageTopic, handler: MessageHandler) -> None:
@@ -111,6 +135,10 @@ class SmeshController:
         ]
         for node_id in stale:
             del self._peers[node_id]
+        self._update_peer_gauge()
+
+    def _update_peer_gauge(self) -> None:
+        self._peer_gauge.labels(node_id=self.node_id).set(len(self.peers))
 
     async def _announce(self) -> None:
         await self.send(MessageTopic.DISCOVERY, {"public_key": self._identity.public_key})
@@ -124,6 +152,15 @@ class SmeshController:
         if msg.source == self._identity.node_id:
             return
 
+        self._received_counter.labels(
+            node_id=self.node_id,
+            topic=msg.topic.value,
+        ).inc()
+        self._emit_telemetry(
+            "mesh.message.received",
+            {"topic": msg.topic.value, "source": msg.source, "destination": msg.destination},
+        )
+
         if msg.topic == MessageTopic.HEARTBEAT:
             await self._on_heartbeat(msg)
         elif msg.topic == MessageTopic.DISCOVERY:
@@ -135,11 +172,13 @@ class SmeshController:
 
     async def _on_heartbeat(self, msg: MeshMessage) -> None:
         self._peers[msg.source] = time.time()
+        self._update_peer_gauge()
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_discovery(self, msg: MeshMessage) -> None:
         is_new = msg.source not in self._peers
         self._peers[msg.source] = time.time()
+        self._update_peer_gauge()
         if is_new:
             await self._announce()
         await self._dispatch_user_handlers(msg.topic.value, msg)
