@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import os
+import weakref
 from dataclasses import dataclass, field
 
 from cryptography.exceptions import InvalidSignature
@@ -12,6 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+
+
+_SIGNING_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PrivateKey] = weakref.WeakKeyDictionary()
+_VERIFY_KEY_CACHE: weakref.WeakKeyDictionary["NodeIdentity", Ed25519PublicKey] = weakref.WeakKeyDictionary()
 
 
 @dataclass(frozen=True)
@@ -57,12 +63,12 @@ class NodeIdentity:
     @property
     def signing_key(self) -> Ed25519PrivateKey:
         """The cached Ed25519 private key."""
-        cached = getattr(self, "_cached_signing_key", None)
+        cached = _SIGNING_KEY_CACHE.get(self)
         if cached is not None:
             return cached
         signing_bytes = base64.urlsafe_b64decode(self._signing_key_b64)
         key = Ed25519PrivateKey.from_private_bytes(signing_bytes)
-        object.__setattr__(self, "_cached_signing_key", key)
+        _SIGNING_KEY_CACHE[self] = key
         return key
 
     @property
@@ -73,11 +79,11 @@ class NodeIdentity:
     @property
     def verify_key(self) -> Ed25519PublicKey:
         """The cached Ed25519 public key derived from the private key."""
-        cached = getattr(self, "_cached_verify_key", None)
+        cached = _VERIFY_KEY_CACHE.get(self)
         if cached is not None:
             return cached
         key = self.signing_key.public_key()
-        object.__setattr__(self, "_cached_verify_key", key)
+        _VERIFY_KEY_CACHE[self] = key
         return key
 
     def sign(self, data: bytes) -> bytes:
@@ -107,26 +113,33 @@ class NodeIdentity:
         )
 
     @classmethod
-    def from_env(cls, node_id: str | None = None) -> "NodeIdentity":
+    def from_env(
+        cls, node_id: str | None = None, *, persist_ephemeral: bool = False
+    ) -> "NodeIdentity":
         """Load a node identity from the environment.
 
         ``NODE_SIGNING_KEY`` is expected to be a URL-safe base64 encoded Ed25519
-        private key. If it is missing, an ephemeral identity is generated. If it
-        is malformed, a clear :class:`ValueError` is raised.
+        private key. If it is missing, an ephemeral identity is generated. The
+        ephemeral key is only written back to ``os.environ`` when
+        ``persist_ephemeral=True``. If the existing key is malformed, a clear
+        :class:`ValueError` is raised.
         """
         signing_key_b64 = os.getenv("NODE_SIGNING_KEY")
         resolved_node_id = node_id or os.getenv("NODE_ID", "anonymous")
 
         if signing_key_b64 is None:
             identity = cls.generate(resolved_node_id)
-            os.environ["NODE_SIGNING_KEY"] = identity.signing_key_b64
+            if persist_ephemeral:
+                os.environ["NODE_SIGNING_KEY"] = identity.signing_key_b64
             return identity
 
         try:
             signing_bytes = base64.urlsafe_b64decode(signing_key_b64)
             signing_key = Ed25519PrivateKey.from_private_bytes(signing_bytes)
-        except Exception as exc:
-            raise ValueError("NODE_SIGNING_KEY is malformed") from exc
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                "NODE_SIGNING_KEY is malformed: expected URL-safe base64 Ed25519 private key"
+            ) from exc
 
         verify_key_b64, _ = cls._serialize_key_pair(signing_key)
         return cls(

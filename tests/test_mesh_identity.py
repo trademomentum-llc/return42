@@ -40,11 +40,18 @@ def test_identity_from_env(monkeypatch):
 
 def test_identity_from_env_persists_ephemeral_key(monkeypatch):
     monkeypatch.delenv("NODE_SIGNING_KEY", raising=False)
-    identity = NodeIdentity.from_env("som-a")
+    identity = NodeIdentity.from_env("som-a", persist_ephemeral=True)
     assert os.environ["NODE_SIGNING_KEY"] == identity.signing_key_b64
     reloaded = NodeIdentity.from_env("som-a")
     assert reloaded.signing_key_b64 == identity.signing_key_b64
     assert reloaded.verify_key_b64 == identity.verify_key_b64
+
+
+def test_identity_from_env_does_not_persist_ephemeral_key(monkeypatch):
+    monkeypatch.delenv("NODE_SIGNING_KEY", raising=False)
+    identity = NodeIdentity.from_env("som-a", persist_ephemeral=False)
+    assert "NODE_SIGNING_KEY" not in os.environ
+    assert identity.node_id == "som-a"
 
 
 def test_identity_key_types_and_serialization():
@@ -60,5 +67,5 @@ def test_identity_key_types_and_serialization():
 
 def test_identity_from_env_malformed(monkeypatch):
     monkeypatch.setenv("NODE_SIGNING_KEY", "not-valid-base64!!!")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="NODE_SIGNING_KEY"):
         NodeIdentity.from_env("som-c")
