@@ -325,8 +325,17 @@ async def test_controller_rejects_command_from_untrusted_peer():
     bus = InMemoryTransport()
     node_a = NodeIdentity.generate("som-a")
     node_b = NodeIdentity.generate("som-b")
+    registry = MetricsRegistry(registry=CollectorRegistry())
+    telemetry = TelemetryBus()
     # b does not trust a and TOFU is off
-    ctrl_b = SmeshController(node_b, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=False))
+    ctrl_b = SmeshController(
+        node_b,
+        bus,
+        heartbeat_interval=0.05,
+        trust_store=TrustStore(tofu=False),
+        registry=registry,
+        telemetry_bus=telemetry,
+    )
     ctrl_a = SmeshController(node_a, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=False))
 
     received = []
@@ -334,15 +343,70 @@ async def test_controller_rejects_command_from_untrusted_peer():
 
     await ctrl_a.start()
     await ctrl_b.start()
-    await asyncio.sleep(0.15)
+    await _wait_for(lambda: node_a.node_id in ctrl_b.peers, timeout=0.5)
+
+    rejection_samples_before = registry.get_sample_values("mesh_command_rejections_total")
+    rejections_before = sum(
+        v for (name, _), v in rejection_samples_before.items() if name == "mesh_command_rejections_total"
+    )
 
     await ctrl_a.send(MessageTopic.COMMAND, {"action": "ping"})
     await asyncio.sleep(0.1)
 
     assert len(received) == 0
+
+    rejection_samples_after = registry.get_sample_values("mesh_command_rejections_total")
+    rejections_after = sum(
+        v for (name, _), v in rejection_samples_after.items() if name == "mesh_command_rejections_total"
+    )
+    assert rejections_after - rejections_before == 1.0
+
+    rejected_events = telemetry.events("mesh.command.rejected")
+    assert len(rejected_events) == 1
+    assert rejected_events[0].payload["source"] == node_a.node_id
+    assert rejected_events[0].payload["reason"] == "untrusted"
+
     await ctrl_a.stop()
     await ctrl_b.stop()
 
+
+@pytest.mark.asyncio
+async def test_controller_drops_unsigned_command_and_records_metrics():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    registry = MetricsRegistry(registry=CollectorRegistry())
+    telemetry = TelemetryBus()
+    ctrl = SmeshController(node, bus, registry=registry, telemetry_bus=telemetry)
+
+    received = []
+    ctrl.on_message(MessageTopic.COMMAND, lambda m: received.append(m))
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.COMMAND,
+        payload={"action": "ping"},
+    )
+    await bus.publish(msg)
+    await asyncio.sleep(0.05)
+
+    assert len(received) == 0
+    failure_samples = registry.get_sample_values("mesh_signature_failures_total")
+    assert sum(
+        v for (name, _), v in failure_samples.items() if name == "mesh_signature_failures_total"
+    ) == 1.0
+    verification_samples = registry.get_sample_values("mesh_signature_verifications_total")
+    invalid = {
+        k: v
+        for k, v in verification_samples.items()
+        if k[0] == "mesh_signature_verifications_total"
+        and dict(k[1]).get("valid") == "false"
+    }
+    assert sum(invalid.values()) == 1.0
+    assert any(e.name == "mesh.message.signature_invalid" for e in telemetry.events())
+
+    await ctrl.stop()
 
 
 @pytest.mark.asyncio

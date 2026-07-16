@@ -37,7 +37,9 @@ class TrustStore:
         self._trusted.add(node_id)
 
     def trust_from_discovery(self, node_id: str, verify_key_b64: str) -> bool:
-        self._known[node_id] = verify_key_b64
+        # Never overwrite a pinned or previously discovered key via discovery.
+        if node_id not in self._known:
+            self._known[node_id] = verify_key_b64
         if self._tofu or node_id in self._trusted:
             self._trusted.add(node_id)
             return True

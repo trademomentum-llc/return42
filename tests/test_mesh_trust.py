@@ -23,6 +23,21 @@ def test_trust_store_tofu():
     assert store.is_trusted("som-b") is True
 
 
+def test_trust_store_discovery_does_not_overwrite_existing_key():
+    store = TrustStore(tofu=True)
+    store.trust_from_discovery("som-b", "first-key-b64")
+    store.trust_from_discovery("som-b", "attacker-key-b64")
+    assert store.get_key("som-b") == "first-key-b64"
+    assert store.is_trusted("som-b") is True
+
+
+def test_trust_store_discovery_does_not_overwrite_pre_enrolled_key():
+    store = TrustStore(tofu=False, trusted_peers={"som-b": "enrolled-key-b64"})
+    store.trust_from_discovery("som-b", "attacker-key-b64")
+    assert store.get_key("som-b") == "enrolled-key-b64"
+    assert store.is_trusted("som-b") is True
+
+
 def test_trust_store_register_adds_peer():
     store = TrustStore(tofu=False)
     store.register("som-b", "key-b64")
