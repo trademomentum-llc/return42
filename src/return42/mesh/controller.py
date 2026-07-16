@@ -108,7 +108,8 @@ class SmeshController:
             topic=topic,
             payload=payload,
         )
-        await self._transport.publish(msg)
+        signed = msg.sign(self._identity)
+        await self._transport.publish(signed)
         destination_type = "direct" if destination else "broadcast"
         self._sent_counter.labels(
             node_id=self.node_id,
