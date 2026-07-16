@@ -2,11 +2,15 @@ import asyncio
 import time
 
 import pytest
+from prometheus_client import CollectorRegistry
 
 from return42.mesh.controller import SmeshController
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.message import MeshMessage, MessageTopic
 from return42.mesh.transport import InMemoryTransport
+from return42.mesh.trust import TrustStore
+from return42.observability.metrics import MetricsRegistry
+from return42.observability.telemetry import TelemetryBus
 from tests.conftest import _wait_for
 
 
@@ -47,16 +51,18 @@ async def test_user_heartbeat_handler_is_dispatched():
     ctrl.on_message(MessageTopic.HEARTBEAT, handler)
     await ctrl.start()
 
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
     msg = MeshMessage(
-        source="som-b",
+        source=sender.node_id,
         destination=None,
         topic=MessageTopic.HEARTBEAT,
         payload={"ts": 1.0},
-    )
+    ).sign(sender)
     await bus.publish(msg)
 
     assert len(received) == 1
-    assert received[0].source == "som-b"
+    assert received[0].source == sender.node_id
 
     await ctrl.stop()
 
@@ -82,17 +88,19 @@ async def test_restart_does_not_duplicate_subscriptions():
     ctrl._on_message = wrapped_on_message
     await ctrl.start()
 
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
     msg = MeshMessage(
-        source="som-b",
+        source=sender.node_id,
         destination=None,
         topic=MessageTopic.HEARTBEAT,
         payload={"ts": 1.0},
-    )
+    ).sign(sender)
     await bus.publish(msg)
 
     # A single published heartbeat must be handled exactly once.
     assert calls == 1
-    assert ctrl.peers == {"som-b"}
+    assert ctrl.peers == {sender.node_id}
 
     await ctrl.stop()
 
@@ -160,16 +168,18 @@ async def test_sync_user_handler_is_dispatched():
     ctrl.on_message(MessageTopic.COMMAND, lambda msg: received.append(msg))
 
     await ctrl.start()
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
     msg = MeshMessage(
-        source="som-b",
+        source=sender.node_id,
         destination=None,
         topic=MessageTopic.COMMAND,
         payload={"action": "ping"},
-    )
+    ).sign(sender)
     await bus.publish(msg)
 
     assert len(received) == 1
-    assert received[0].source == "som-b"
+    assert received[0].source == sender.node_id
 
     await ctrl.stop()
 
@@ -269,16 +279,214 @@ async def test_telemetry_message_dispatches_user_handler():
     ctrl.on_message(MessageTopic.TELEMETRY, handler)
     await ctrl.start()
 
+    sender = NodeIdentity.generate("som-b")
+    ctrl._trust_store.register(sender.node_id, sender.public_key)
     msg = MeshMessage(
-        source="som-b",
+        source=sender.node_id,
         destination=None,
         topic=MessageTopic.TELEMETRY,
         payload={"temp": 42.0},
-    )
+    ).sign(sender)
     await bus.publish(msg)
 
     assert len(received) == 1
-    assert received[0].source == "som-b"
+    assert received[0].source == sender.node_id
     assert received[0].topic == MessageTopic.TELEMETRY
+
+    await ctrl.stop()
+
+
+
+@pytest.mark.asyncio
+async def test_controller_rejects_unsigned_command():
+    bus = InMemoryTransport()
+    node_a = NodeIdentity.generate("som-a")
+    node_b = NodeIdentity.generate("som-b")
+    ctrl_a = SmeshController(node_a, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=True))
+    ctrl_b = SmeshController(node_b, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=True))
+
+    received = []
+    ctrl_b.on_message(MessageTopic.COMMAND, lambda m: received.append(m))
+
+    await ctrl_a.start()
+    await ctrl_b.start()
+    await _wait_for(lambda: len(ctrl_a.peers) == 1 and len(ctrl_b.peers) == 1)
+
+    await ctrl_a.send(MessageTopic.COMMAND, {"action": "ping"})
+    await _wait_for(lambda: len(received) == 1)
+
+    assert received[0].source == "som-a"
+    await ctrl_a.stop()
+    await ctrl_b.stop()
+
+
+@pytest.mark.asyncio
+async def test_controller_rejects_command_from_untrusted_peer():
+    bus = InMemoryTransport()
+    node_a = NodeIdentity.generate("som-a")
+    node_b = NodeIdentity.generate("som-b")
+    # b does not trust a and TOFU is off
+    ctrl_b = SmeshController(node_b, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=False))
+    ctrl_a = SmeshController(node_a, bus, heartbeat_interval=0.05, trust_store=TrustStore(tofu=False))
+
+    received = []
+    ctrl_b.on_message(MessageTopic.COMMAND, lambda m: received.append(m))
+
+    await ctrl_a.start()
+    await ctrl_b.start()
+    await asyncio.sleep(0.15)
+
+    await ctrl_a.send(MessageTopic.COMMAND, {"action": "ping"})
+    await asyncio.sleep(0.1)
+
+    assert len(received) == 0
+    await ctrl_a.stop()
+    await ctrl_b.stop()
+
+
+
+@pytest.mark.asyncio
+async def test_controller_drops_unsigned_heartbeat_and_records_metrics():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    registry = MetricsRegistry(registry=CollectorRegistry())
+    telemetry = TelemetryBus()
+    ctrl = SmeshController(node, bus, registry=registry, telemetry_bus=telemetry)
+
+    received = []
+    ctrl.on_message(MessageTopic.HEARTBEAT, lambda m: received.append(m))
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source="som-b",
+        destination=None,
+        topic=MessageTopic.HEARTBEAT,
+        payload={"ts": 1.0},
+    )
+    await bus.publish(msg)
+    await asyncio.sleep(0.05)
+
+    assert len(received) == 0
+    failure_samples = registry.get_sample_values("mesh_signature_failures_total")
+    assert sum(
+        v for (name, _), v in failure_samples.items() if name == "mesh_signature_failures_total"
+    ) == 1.0
+    verification_samples = registry.get_sample_values("mesh_signature_verifications_total")
+    invalid = {
+        k: v
+        for k, v in verification_samples.items()
+        if k[0] == "mesh_signature_verifications_total"
+        and dict(k[1]).get("valid") == "false"
+    }
+    assert sum(invalid.values()) == 1.0
+    assert any(e.name == "mesh.message.signature_invalid" for e in telemetry.events())
+
+    await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_controller_command_rejection_records_metric_and_telemetry():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    sender = NodeIdentity.generate("som-b")
+    registry = MetricsRegistry(registry=CollectorRegistry())
+    telemetry = TelemetryBus()
+    ctrl = SmeshController(
+        node,
+        bus,
+        registry=registry,
+        telemetry_bus=telemetry,
+        trust_store=TrustStore(tofu=False),
+    )
+
+    received = []
+    ctrl.on_message(MessageTopic.COMMAND, lambda m: received.append(m))
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source=sender.node_id,
+        destination=None,
+        topic=MessageTopic.COMMAND,
+        payload={"action": "ping"},
+    ).sign(sender)
+    await bus.publish(msg)
+    await asyncio.sleep(0.05)
+
+    assert len(received) == 0
+    rejection_samples = registry.get_sample_values("mesh_command_rejections_total")
+    assert sum(
+        v for (name, _), v in rejection_samples.items() if name == "mesh_command_rejections_total"
+    ) == 1.0
+    rejected_events = telemetry.events("mesh.command.rejected")
+    assert len(rejected_events) == 1
+    assert rejected_events[0].payload["reason"] == "untrusted"
+
+    await ctrl.stop()
+
+
+@pytest.mark.asyncio
+async def test_controller_mode_reflects_trust_state():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+
+    ctrl_tofu = SmeshController(node, bus, trust_store=TrustStore(tofu=True))
+    assert ctrl_tofu.mode == "full"
+
+    ctrl_empty = SmeshController(node, bus, trust_store=TrustStore(tofu=False))
+    assert ctrl_empty.mode == "reduced"
+
+    ctrl_pretrusted = SmeshController(
+        node,
+        bus,
+        trust_store=TrustStore(tofu=False, trusted_peers={"som-b": "key"}),
+    )
+    assert ctrl_pretrusted.mode == "full"
+
+    ctrl_forced_reduced = SmeshController(
+        node, bus, trust_store=TrustStore(tofu=True), reduced_mode=True
+    )
+    assert ctrl_forced_reduced.mode == "reduced"
+
+
+@pytest.mark.asyncio
+async def test_controller_discovery_registers_trust_with_tofu():
+    bus = InMemoryTransport()
+    node = NodeIdentity.generate("som-a")
+    sender = NodeIdentity.generate("som-b")
+    registry = MetricsRegistry(registry=CollectorRegistry())
+    telemetry = TelemetryBus()
+    ctrl = SmeshController(
+        node,
+        bus,
+        registry=registry,
+        telemetry_bus=telemetry,
+        trust_store=TrustStore(tofu=True),
+    )
+
+    await ctrl.start()
+
+    msg = MeshMessage(
+        source=sender.node_id,
+        destination=None,
+        topic=MessageTopic.DISCOVERY,
+        payload={"public_key": sender.public_key},
+    ).sign(sender)
+    await bus.publish(msg)
+    await asyncio.sleep(0.05)
+
+    assert ctrl._trust_store.is_trusted(sender.node_id)
+    trusted_events = telemetry.events("mesh.peer.trusted")
+    assert len(trusted_events) == 1
+    assert trusted_events[0].payload["peer_id"] == sender.node_id
+
+    gauge_samples = registry.get_sample_values("mesh_peer_trust_state")
+    trusted_sample = {
+        k: v
+        for k, v in gauge_samples.items()
+        if k[0] == "mesh_peer_trust_state"
+        and dict(k[1]).get("node_id") == sender.node_id
+        and dict(k[1]).get("level") == "trusted"
+    }
+    assert sum(trusted_sample.values()) == 1.0
 
     await ctrl.stop()

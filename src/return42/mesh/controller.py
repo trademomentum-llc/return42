@@ -13,6 +13,7 @@ from return42.observability.telemetry import TelemetryBus, TelemetryEvent, Event
 from .identity import NodeIdentity
 from .message import MeshMessage, MessageTopic
 from .transport import MeshTransport
+from .trust import TrustLevel, TrustStore
 
 
 MessageHandler = Callable[[MeshMessage], Awaitable[None] | None]
@@ -29,6 +30,8 @@ class SmeshController:
         peer_timeout: float | None = None,
         telemetry_bus: TelemetryBus | None = None,
         registry: MetricsRegistry | None = None,
+        trust_store: TrustStore | None = None,
+        reduced_mode: bool = False,
     ) -> None:
         self._identity = identity
         self._transport = transport
@@ -36,6 +39,8 @@ class SmeshController:
         self._peer_timeout = peer_timeout if peer_timeout is not None else 3 * heartbeat_interval
         self._telemetry = telemetry_bus or TelemetryBus()
         self._registry = registry or get_registry()
+        self._trust_store = trust_store if trust_store is not None else TrustStore(tofu=True)
+        self._reduced_mode = reduced_mode
         self._sent_counter = self._registry.counter(
             "mesh_messages_sent_total",
             "Total mesh messages published by this node",
@@ -51,6 +56,25 @@ class SmeshController:
             "Number of known non-stale peers",
             ("node_id",),
         )
+        self._signature_verifications_counter = self._registry.counter(
+            "mesh_signature_verifications_total",
+            "Total mesh message signature verifications",
+            ("valid",),
+        )
+        self._signature_failures_counter = self._registry.counter(
+            "mesh_signature_failures_total",
+            "Total mesh messages dropped due to invalid signature",
+        )
+        self._command_rejections_counter = self._registry.counter(
+            "mesh_command_rejections_total",
+            "Total mesh commands rejected",
+            ("reason",),
+        )
+        self._peer_trust_gauge = self._registry.gauge(
+            "mesh_peer_trust_state",
+            "Trust state per known peer",
+            ("node_id", "level"),
+        )
         self._peers: dict[str, float] = {}
         self._handlers: dict[str, list[MessageHandler]] = {}
         self._heartbeat_task: asyncio.Task | None = None
@@ -59,6 +83,14 @@ class SmeshController:
     @property
     def node_id(self) -> str:
         return self._identity.node_id
+
+    @property
+    def mode(self) -> str:
+        if self._reduced_mode:
+            return "reduced"
+        if self._trust_store.is_tofu or self._trust_store.trusted_count > 0:
+            return "full"
+        return "reduced"
 
     @property
     def peers(self) -> set[str]:
@@ -141,6 +173,12 @@ class SmeshController:
     def _update_peer_gauge(self) -> None:
         self._peer_gauge.labels(node_id=self.node_id).set(len(self.peers))
 
+    def _update_peer_trust_gauge(self, peer_id: str, level: TrustLevel) -> None:
+        trusted = 1.0 if level == TrustLevel.TRUSTED else 0.0
+        untrusted = 0.0 if level == TrustLevel.TRUSTED else 1.0
+        self._peer_trust_gauge.labels(node_id=peer_id, level=TrustLevel.TRUSTED.value).set(trusted)
+        self._peer_trust_gauge.labels(node_id=peer_id, level=TrustLevel.UNTRUSTED.value).set(untrusted)
+
     async def _announce(self) -> None:
         await self.send(MessageTopic.DISCOVERY, {"public_key": self._identity.public_key})
 
@@ -162,14 +200,44 @@ class SmeshController:
             {"topic": msg.topic.value, "source": msg.source, "destination": msg.destination},
         )
 
+        if msg.topic == MessageTopic.COMMAND:
+            await self._on_command(msg)
+            return
+
+        verify_key_b64 = self._resolve_verify_key(msg)
+        if verify_key_b64 is None:
+            self._signature_verifications_counter.labels(valid="false").inc()
+            self._signature_failures_counter.inc()
+            self._emit_telemetry(
+                "mesh.message.signature_invalid",
+                {"topic": msg.topic.value, "source": msg.source, "reason": "no_key"},
+            )
+            return
+
+        signer = NodeIdentity(node_id=msg.source, verify_key_b64=verify_key_b64)
+        if not msg.verify(signer):
+            self._signature_verifications_counter.labels(valid="false").inc()
+            self._signature_failures_counter.inc()
+            self._emit_telemetry(
+                "mesh.message.signature_invalid",
+                {"topic": msg.topic.value, "source": msg.source, "reason": "bad_signature"},
+            )
+            return
+
+        self._signature_verifications_counter.labels(valid="true").inc()
+
         if msg.topic == MessageTopic.HEARTBEAT:
             await self._on_heartbeat(msg)
         elif msg.topic == MessageTopic.DISCOVERY:
             await self._on_discovery(msg)
-        elif msg.topic == MessageTopic.COMMAND:
-            await self._on_command(msg)
         else:
             await self._dispatch_user_handlers(msg.topic.value, msg)
+
+    def _resolve_verify_key(self, msg: MeshMessage) -> str | None:
+        """Return the verify key base64 to use for ``msg`` or ``None``."""
+        if msg.topic == MessageTopic.DISCOVERY:
+            return msg.payload.get("public_key")
+        return self._trust_store.get_key(msg.source)
 
     async def _on_heartbeat(self, msg: MeshMessage) -> None:
         self._peers[msg.source] = time.time()
@@ -180,11 +248,49 @@ class SmeshController:
         is_new = msg.source not in self._peers
         self._peers[msg.source] = time.time()
         self._update_peer_gauge()
+
+        public_key = msg.payload.get("public_key")
+        if public_key:
+            became_trusted = self._trust_store.trust_from_discovery(msg.source, public_key)
+            if became_trusted:
+                self._update_peer_trust_gauge(msg.source, TrustLevel.TRUSTED)
+                self._emit_telemetry(
+                    "mesh.peer.trusted",
+                    {"peer_id": msg.source, "topic": msg.topic.value},
+                )
+            else:
+                self._update_peer_trust_gauge(msg.source, TrustLevel.UNTRUSTED)
+                self._emit_telemetry(
+                    "mesh.peer.untrusted",
+                    {"peer_id": msg.source, "topic": msg.topic.value},
+                )
+
         if is_new:
             await self._announce()
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _on_command(self, msg: MeshMessage) -> None:
+        if not self._trust_store.is_trusted(msg.source):
+            self._command_rejections_counter.labels(reason="untrusted").inc()
+            self._emit_telemetry(
+                "mesh.command.rejected",
+                {"source": msg.source, "reason": "untrusted"},
+            )
+            return
+
+        verify_key_b64 = self._trust_store.get_key(msg.source)
+        if verify_key_b64 is None or not msg.verify(
+            NodeIdentity(node_id=msg.source, verify_key_b64=verify_key_b64)
+        ):
+            self._signature_verifications_counter.labels(valid="false").inc()
+            self._signature_failures_counter.inc()
+            self._emit_telemetry(
+                "mesh.message.signature_invalid",
+                {"topic": msg.topic.value, "source": msg.source, "reason": "bad_signature"},
+            )
+            return
+
+        self._signature_verifications_counter.labels(valid="true").inc()
         await self._dispatch_user_handlers(msg.topic.value, msg)
 
     async def _dispatch_user_handlers(self, topic: str, msg: MeshMessage) -> None:

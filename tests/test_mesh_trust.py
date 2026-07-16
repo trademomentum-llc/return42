@@ -50,3 +50,26 @@ def test_trust_store_from_env_tofu(monkeypatch):
 def test_trust_level_enum_values():
     assert TrustLevel.UNTRUSTED == "untrusted"
     assert TrustLevel.TRUSTED == "trusted"
+
+
+
+def test_trust_store_get_key_returns_registered_key():
+    store = TrustStore(tofu=False, trusted_peers={"som-b": "key-b64"})
+    assert store.get_key("som-b") == "key-b64"
+
+
+def test_trust_store_get_key_returns_none_for_unknown():
+    store = TrustStore(tofu=False)
+    assert store.get_key("som-b") is None
+
+
+def test_trust_store_is_tofu_property():
+    assert TrustStore(tofu=True).is_tofu is True
+    assert TrustStore(tofu=False).is_tofu is False
+
+
+def test_trust_store_trusted_count_property():
+    store = TrustStore(tofu=False, trusted_peers={"som-b": "key-b64", "som-c": "key-c64"})
+    assert store.trusted_count == 2
+    store.register("som-d", "key-d64")
+    assert store.trusted_count == 3
