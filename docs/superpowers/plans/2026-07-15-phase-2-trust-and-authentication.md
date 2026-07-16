@@ -6,6 +6,8 @@
 
 **Architecture:** Each `NodeIdentity` now owns an Ed25519 signing key pair. `MeshMessage` carries a real signature over a canonical serialization of the message. A new `TrustStore` maintains the set of trusted peer public keys and supports pre-shared-key enrollment (`TRUSTED_PEERS`) plus opt-in trust-on-first-use (`TRUST_ON_FIRST_USE=1`) for sandbox development. `SmeshController` verifies every incoming signature, drops invalid messages, and only dispatches `COMMAND` messages from peers that have achieved `TRUSTED` status. Discovery messages advertise a node's public key so peers can learn and verify it. If a node has no trusted peers and TOFU is disabled, the controller stays in reduced local mode: it continues discovery/heartbeat but rejects command handling.
 
+**Instrumentation foundation (already implemented):** `SmeshController` already emits telemetry events and Prometheus metrics for sent/received messages and peer count (`mesh_messages_sent_total`, `mesh_messages_received_total`, `mesh_peers_count`). Phase 2 extends this with signature-verification, trust-state, and command-rejection instrumentation.
+
 **Tech Stack:** Python 3.11+, `cryptography>=42.0.0`, pydantic, pytest-asyncio, return42.mesh, return42.observability.
 
 ## Global Constraints
@@ -42,6 +44,7 @@
 │   ├── test_mesh_trust.py       # TrustStore + bootstrap behavior
 │   ├── test_mesh_transport.py
 │   ├── test_mesh_controller.py  # signed controller tests, untrusted rejection
+│   ├── test_mesh_instrumentation.py  # mesh metrics + telemetry (existing)
 │   └── test_mesh_sandbox.py
 └── scripts/
     └── run_mesh_sandbox.py      # optional TOFU / trusted-peers flags
@@ -346,11 +349,16 @@ git commit -m "feat(mesh): sign and verify MeshMessage with Ed25519"
 **Interfaces:**
 - `SmeshController.__init__(..., trust_store: TrustStore | None = None, reduced_mode: bool = False)`
 - `SmeshController.mode` property: `"full"` if at least one trusted peer exists or TOFU enabled; `"reduced"` otherwise.
-- On incoming message: verify signature; if invalid, drop and emit telemetry `mesh.message.signature_invalid`.
-- On `DISCOVERY`: validate signature, register public key in trust store (TOFU or pre-trusted), update peers.
+- On incoming message: verify signature; if invalid, drop, increment `mesh_signature_failures_total`, and emit telemetry `mesh.message.signature_invalid`.
+- On `DISCOVERY`: validate signature, register public key in trust store (TOFU or pre-trusted), update peers, emit `mesh.peer.trusted`/`mesh.peer.untrusted` telemetry.
 - On `HEARTBEAT`: validate signature, update peer timestamp.
-- On `COMMAND`: validate signature, reject if source not trusted, otherwise dispatch user handlers.
+- On `COMMAND`: validate signature, reject if source not trusted (increment `mesh_command_rejections_total{reason=untrusted}`, emit `mesh.command.rejected`), otherwise dispatch user handlers.
 - `send()` signs the message before publishing using the controller's identity.
+- Metrics to expose:
+  - `mesh_signature_verifications_total{valid=true|false}` counter
+  - `mesh_signature_failures_total` counter
+  - `mesh_command_rejections_total{reason=...}` counter
+  - `mesh_peer_trust_state{node_id=...,level=trusted|untrusted}` gauge
 
 - [ ] **Step 1: Write failing tests**
 
@@ -412,9 +420,10 @@ Expected: FAIL (unsigned messages rejected, but current send doesn't sign).
 Update `SmeshController`:
 - Inject `trust_store` defaulting to `TrustStore(tofu=True)` for sandbox convenience.
 - Sign every outgoing message in `send()`.
-- Verify signature on every incoming message in `_on_message()`; drop invalid ones.
-- Update trust on discovery using `trust_store.trust_from_discovery(...)`.
-- Only dispatch command handlers if `trust_store.is_trusted(msg.source)`.
+- Verify signature on every incoming message in `_on_message()`; drop invalid ones and emit telemetry + Prometheus metrics.
+- Update trust on discovery using `trust_store.trust_from_discovery(...)`. Emit `mesh.peer.trusted` telemetry when a peer becomes trusted and update the `mesh_peer_trust_state` gauge.
+- Only dispatch command handlers if `trust_store.is_trusted(msg.source)`. Rejections increment `mesh_command_rejections_total` and emit `mesh.command.rejected`.
+- Initialize the new counters/gauge in `__init__` using the injected `MetricsRegistry`.
 
 - [ ] **Step 3: Run tests**
 
@@ -577,6 +586,11 @@ Add a short **Phase 2: Trust and Authentication** section to `README.md` and/or 
 - How to run two nodes with pre-shared trust.
 - How to run with TOFU for sandbox.
 
+Update `dashboards/return42-observability.json` to include panels for:
+- Signature verification outcomes (`mesh_signature_verifications_total`, `mesh_signature_failures_total`)
+- Command rejections (`mesh_command_rejections_total`)
+- Peer trust-state gauge (`mesh_peer_trust_state`)
+
 - [ ] **Step 4: Commit final fixes**
 
 ```bash
@@ -594,4 +608,6 @@ git commit -m "chore: phase 2 final wiring and docs"
 - [ ] Private signing keys are never logged, serialized, or sent on the wire.
 - [ ] TrustStore supports both pre-enrollment and TOFU.
 - [ ] Reduced local mode is exercised in tests.
+- [ ] Trust/security metrics and telemetry events are emitted and tested.
+- [ ] Grafana dashboard panels exist for signature, trust, and command-rejection metrics.
 - [ ] No `TODO`/`TBD` placeholders remain.
