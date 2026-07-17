@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClinicLink Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #2a9d8f; }
+    .handoff { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+    .handoff h3 { margin: 0 0 0.5rem; }
+    .meta { color: #666; font-size: 0.9rem; }
+    button { background: #2a9d8f; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+    button:disabled { background: #999; }
+  </style>
+</head>
+<body>
+  <h1>ClinicLink Dashboard</h1>
+  <div id="app">
+    <p>Loading handoffs...</p>
+  </div>
+
+  <script>
+    const app = document.getElementById('app');
+    const token = localStorage.getItem('clinic_token') || prompt('Enter clinic token:');
+    if (token) localStorage.setItem('clinic_token', token);
+
+    async function loadHandoffs() {
+      const res = await fetch('/handoffs?status=pending');
+      const handoffs = await res.json();
+      if (handoffs.length === 0) {
+        app.innerHTML = '<p>No pending handoffs.</p>';
+        return;
+      }
+      app.innerHTML = handoffs.map(h => `
+        <div class="handoff" id="ho-${h.handoff_id}">
+          <h3>${h.patient_id} — ${h.chief_complaint || 'No complaint recorded'}</h3>
+          <div class="meta">Ambulance: ${h.ambulance_id} | ETA: ${h.eta_minutes ?? '?'} min</div>
+          <pre>${JSON.stringify(h.vital_signs, null, 2)}</pre>
+          <button onclick="ack('${h.handoff_id}')">Acknowledge</button>
+        </div>
+      `).join('');
+    }
+
+    async function ack(id) {
+      await fetch(`/handoffs/${id}/ack`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      loadHandoffs();
+    }
+
+    loadHandoffs();
+    setInterval(loadHandoffs, 5000);
+  </script>
+</body>
+</html>

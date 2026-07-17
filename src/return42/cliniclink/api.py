@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header, HTTPException
 
 from return42.mesh.trust import TrustStore
 
+from .dashboard import mount_dashboard
 from .models import HandoffStatus, PatientHandoff
 from .policy import ClinicPolicy
 from .queue import SyncQueue
@@ -64,4 +65,5 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    mount_dashboard(app)
     return app
