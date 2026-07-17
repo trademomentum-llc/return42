@@ -189,6 +189,12 @@
           "markdownDescription": "Enables the has_secret command without any pre-configured scope."
         },
         {
+          "description": "Enables the read_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-read-secret",
+          "markdownDescription": "Enables the read_secret command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_mode command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-mode",
@@ -217,6 +223,12 @@
           "type": "string",
           "const": "deny-has-secret",
           "markdownDescription": "Denies the has_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-read-secret",
+          "markdownDescription": "Denies the read_secret command without any pre-configured scope."
         },
         {
           "description": "Denies the set_mode command without any pre-configured scope.",

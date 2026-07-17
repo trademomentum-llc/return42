@@ -9,6 +9,7 @@
     "allow-sidecar-request",
     "allow-set-mode",
     "allow-store-secret",
-    "allow-has-secret"
+    "allow-has-secret",
+    "allow-read-secret"
   ]
 }

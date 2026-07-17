@@ -38,3 +38,8 @@ export async function storeSecret(
 export async function hasSecret(key: StoredSecretKey): Promise<boolean> {
   return invoke('has_secret', { key });
 }
+
+/** Read a plaintext token from secure storage. Signing keys are not exposed. */
+export async function readSecret(key: StoredSecretKey): Promise<string | null> {
+  return invoke('read_secret', { key });
+}

@@ -9,6 +9,8 @@ async fn sidecar_secret(key: &str) -> Option<String> {
     match secrets::read_secret(key).await {
         Ok(value) => value,
         Err(e) => {
+            // The project does not currently depend on a structured logging crate,
+            // so we write the warning to stderr. The secret value is never logged.
             eprintln!("warning: failed to read secret '{}': {}", key, e);
             None
         }

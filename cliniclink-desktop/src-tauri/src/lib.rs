@@ -14,17 +14,25 @@ async fn store_secret(key: String, value: String) -> Result<(), String> {
 #[tauri::command]
 async fn has_secret(key: String) -> Result<bool, String> {
     if !secrets::ALLOWED_STORE_KEYS.contains(&key.as_str()) {
-        return Err(format!(
-            "key '{}' is not allowed; only {:?} may be queried",
-            key,
-            secrets::ALLOWED_STORE_KEYS
-        ));
+        return Err("key is not allowed".to_string());
     }
+    // keyring does not expose a cheap existence check, so we fetch the value
+    // and discard it. This is acceptable because only short tokens are stored.
     match secrets::read_secret(&key).await {
         Ok(Some(_)) => Ok(true),
         Ok(None) => Ok(false),
         Err(e) => Err(e),
     }
+}
+
+/// Reads a plaintext secret from secure storage.
+/// Only frontend-allowed keys may be read; signing keys are never returned.
+#[tauri::command]
+async fn read_secret(key: String) -> Result<Option<String>, String> {
+    if !secrets::ALLOWED_STORE_KEYS.contains(&key.as_str()) {
+        return Err("key is not allowed".to_string());
+    }
+    secrets::read_secret(&key).await
 }
 
 #[tauri::command]
@@ -129,7 +137,8 @@ pub fn run() {
             sidecar_request,
             set_mode,
             store_secret,
-            has_secret
+            has_secret,
+            read_secret
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

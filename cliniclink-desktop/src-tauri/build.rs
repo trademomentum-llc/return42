@@ -7,6 +7,7 @@ fn main() {
                 "set_mode",
                 "store_secret",
                 "has_secret",
+                "read_secret",
             ]),
         ),
     )
