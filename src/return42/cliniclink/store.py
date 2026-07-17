@@ -52,30 +52,58 @@ class HandoffStore:
             acknowledged_at=datetime.fromisoformat(row["acknowledged_at"]) if row["acknowledged_at"] else None,
         )
 
+    @staticmethod
+    def _handoff_to_row(handoff: PatientHandoff) -> tuple:
+        return (
+            handoff.handoff_id,
+            handoff.patient_id,
+            handoff.ambulance_id,
+            handoff.clinic_id,
+            json.dumps(handoff.vital_signs),
+            json.dumps(handoff.medications),
+            handoff.chief_complaint,
+            handoff.eta_minutes,
+            handoff.status.value,
+            handoff.created_at.isoformat(),
+            handoff.acknowledged_at.isoformat() if handoff.acknowledged_at else None,
+        )
+
+    @staticmethod
+    def _same_contents(a: PatientHandoff, b: PatientHandoff) -> bool:
+        """Return True if the two handoffs carry identical PHI-bearing content."""
+        return (
+            a.patient_id == b.patient_id
+            and a.ambulance_id == b.ambulance_id
+            and a.clinic_id == b.clinic_id
+            and a.vital_signs == b.vital_signs
+            and a.medications == b.medications
+            and a.chief_complaint == b.chief_complaint
+            and a.eta_minutes == b.eta_minutes
+        )
+
     def create(self, handoff: PatientHandoff) -> PatientHandoff:
+        row = self._handoff_to_row(handoff)
         with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
             conn.execute(
                 """
                 INSERT INTO handoffs (handoff_id, patient_id, ambulance_id, clinic_id,
                                       vital_signs, medications, chief_complaint, eta_minutes,
                                       status, created_at, acknowledged_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (handoff_id) DO NOTHING
                 """,
-                (
-                    handoff.handoff_id,
-                    handoff.patient_id,
-                    handoff.ambulance_id,
-                    handoff.clinic_id,
-                    json.dumps(handoff.vital_signs),
-                    json.dumps(handoff.medications),
-                    handoff.chief_complaint,
-                    handoff.eta_minutes,
-                    handoff.status.value,
-                    handoff.created_at.isoformat(),
-                    handoff.acknowledged_at.isoformat() if handoff.acknowledged_at else None,
-                ),
+                row,
             )
-        return handoff
+            existing = conn.execute(
+                "SELECT * FROM handoffs WHERE handoff_id = ?", (handoff.handoff_id,)
+            ).fetchone()
+        existing_handoff = self._row_to_handoff(existing)
+        if not self._same_contents(existing_handoff, handoff):
+            raise ValueError(
+                f"handoff_id {handoff.handoff_id!r} already exists with different contents"
+            )
+        return existing_handoff
 
     def get(self, handoff_id: str) -> PatientHandoff | None:
         with self._connect() as conn:

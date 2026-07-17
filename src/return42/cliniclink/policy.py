@@ -8,9 +8,15 @@ from return42.mesh.trust import TrustStore
 class ClinicPolicy:
     """Authorization policy for ClinicLink handoffs."""
 
-    def __init__(self, trust_store: TrustStore) -> None:
+    def __init__(self, trust_store: TrustStore, clinic_token: str | None = None) -> None:
         self._trust_store = trust_store
-        self._clinic_token = os.getenv("CLINIC_TOKEN", "clinic-local-token")
+        self._clinic_token = clinic_token
+
+    @property
+    def clinic_token(self) -> str:
+        if self._clinic_token is None:
+            self._clinic_token = os.getenv("CLINIC_TOKEN", "clinic-local-token")
+        return self._clinic_token
 
     def can_submit_handoff(self, ambulance_id: str, verify_key_b64: str) -> bool:
         """An ambulance may submit a handoff if it is trusted and its advertised key matches."""
@@ -22,4 +28,4 @@ class ClinicPolicy:
 
     def can_acknowledge(self, clinic_token: str) -> bool:
         """Clinic staff acknowledge via a local bearer token."""
-        return bool(clinic_token and clinic_token == self._clinic_token)
+        return bool(clinic_token and clinic_token == self.clinic_token)

@@ -31,6 +31,12 @@ class SyncQueue:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sync_queue_direction_done_created
+                ON sync_queue (direction, done, created_at)
+                """
+            )
 
     def enqueue(self, handoff: PatientHandoff, direction: str) -> None:
         with self._connect() as conn:
