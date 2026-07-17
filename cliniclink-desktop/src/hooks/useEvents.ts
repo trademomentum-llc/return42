@@ -9,16 +9,27 @@ export type SidecarEvent = {
 
 export function useSidecarEvent(callback: (event: SidecarEvent) => void) {
   useEffect(() => {
+    let active = true;
     let unlisten: (() => void) | undefined;
+
     listen<string>('cliniclink:event', (e) => {
+      if (!active) return;
       try {
         callback(JSON.parse(e.payload));
       } catch {
         // ignore malformed events
       }
     }).then((fn) => {
-      unlisten = fn;
+      if (active) {
+        unlisten = fn;
+      } else {
+        fn();
+      }
     });
-    return () => unlisten?.();
+
+    return () => {
+      active = false;
+      unlisten?.();
+    };
   }, [callback]);
 }
