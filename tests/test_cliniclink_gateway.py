@@ -31,6 +31,7 @@ async def test_gateway_persists_handoff_from_ambulance(tmp_path):
         db_path=str(db_path),
         queue_db_path=str(queue_path),
         trust_store=clinic_store,
+        heartbeat_interval=0.05,
     )
 
     ambulance = AmbulanceSyncClient(
@@ -87,6 +88,7 @@ async def test_gateway_rejects_untrusted_ambulance(tmp_path):
         queue_db_path=str(queue_path),
         trust_store=clinic_store,
         telemetry_bus=telemetry_bus,
+        heartbeat_interval=0.05,
     )
 
     ambulance = AmbulanceSyncClient(
@@ -94,6 +96,7 @@ async def test_gateway_rejects_untrusted_ambulance(tmp_path):
         transport=bus,
         clinic_id="clinic-a",
         trust_store=TrustStore(tofu=False, trusted_peers={"clinic-a": clinic_identity.verify_key_b64}),
+        heartbeat_interval=0.05,
     )
 
     await gateway.start()
@@ -140,6 +143,7 @@ async def test_gateway_rejects_wrong_clinic_id(tmp_path):
         queue_db_path=str(queue_path),
         trust_store=clinic_store,
         telemetry_bus=telemetry_bus,
+        heartbeat_interval=0.05,
     )
 
     ambulance = AmbulanceSyncClient(
@@ -147,6 +151,7 @@ async def test_gateway_rejects_wrong_clinic_id(tmp_path):
         transport=bus,
         clinic_id="clinic-a",
         trust_store=TrustStore(tofu=False, trusted_peers={"clinic-a": clinic_identity.verify_key_b64}),
+        heartbeat_interval=0.05,
     )
 
     await gateway.start()
@@ -198,6 +203,7 @@ async def test_gateway_rejects_invalid_payload(tmp_path):
         queue_db_path=str(queue_path),
         trust_store=clinic_store,
         telemetry_bus=telemetry_bus,
+        heartbeat_interval=0.05,
     )
 
     ambulance = SmeshController(

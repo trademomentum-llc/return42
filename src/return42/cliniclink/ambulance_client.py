@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from return42.mesh.controller import SmeshController
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.message import MeshMessage, MessageTopic
@@ -18,13 +20,19 @@ class AmbulanceSyncClient:
         transport: MeshTransport,
         clinic_id: str,
         trust_store: TrustStore | None = None,
+        heartbeat_interval: float | None = None,
     ) -> None:
         self._identity = identity
         self._clinic_id = clinic_id
+        self._heartbeat_interval = (
+            heartbeat_interval
+            if heartbeat_interval is not None
+            else float(os.getenv("CLINICLINK_HEARTBEAT_INTERVAL", "5.0"))
+        )
         self._controller = SmeshController(
             identity,
             transport,
-            heartbeat_interval=0.05,
+            heartbeat_interval=self._heartbeat_interval,
             trust_store=trust_store or TrustStore(tofu=True),
         )
 

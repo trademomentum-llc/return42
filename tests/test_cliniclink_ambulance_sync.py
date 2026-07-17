@@ -37,6 +37,7 @@ async def test_ambulance_submits_handoff_to_clinic(tmp_path):
         transport=bus,
         clinic_id=clinic_id,
         trust_store=ambulance_store,
+        heartbeat_interval=0.05,
     )
 
     clinic = SmeshController(
