@@ -20,6 +20,16 @@ def _ensure_clinic_service(app: FastAPI) -> ClinicService:
 
 
 def create_sidecar_app() -> FastAPI:
+    """Create the ClinicLink desktop sidecar FastAPI application.
+
+    Design note on clinic mode: the clinic sidecar does **not** start its own
+    mesh receiver. Instead, it proxies REST/WS traffic to the local ClinicLink
+    gateway (which is the canonical mesh receiver for the clinic) and shares a
+    :class:`HandoffStore` with that gateway. Keeping mesh membership in the
+    gateway avoids duplicating identity/trust state in the desktop process and
+    keeps the sidecar focused on UI-facing orchestration.
+    """
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         clinic_service = _ensure_clinic_service(app)
