@@ -1,5 +1,7 @@
 node_modules
 dist
 src-tauri/target
+src-tauri/sidecars/*
+!src-tauri/sidecars/.gitkeep
 .DS_Store
 *.log

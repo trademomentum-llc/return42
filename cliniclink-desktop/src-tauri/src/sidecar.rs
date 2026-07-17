@@ -1,4 +1,5 @@
 use crate::secrets;
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -31,13 +32,38 @@ impl SidecarState {
     }
 }
 
-pub async fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
-    let sidecar_path = app
+/// Resolve the bundled Python sidecar binary from Tauri's resource directory.
+///
+/// The Tauri bundle maps `src-tauri/sidecars/r42-cliniclink` to the resource
+/// directory as `r42-cliniclink`. On Windows the file may be named with a
+/// `.exe` extension, so we also check for that fallback.
+fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let base = app
         .path()
         .resolve("r42-cliniclink", tauri::path::BaseDirectory::Resource)
         .map_err(|e| e.to_string())?;
 
-    let mut cmd = Command::new(sidecar_path);
+    if base.exists() {
+        return Ok(base);
+    }
+
+    let with_exe = base.with_extension("exe");
+    if with_exe.exists() {
+        return Ok(with_exe);
+    }
+
+    Err(format!(
+        "sidecar binary not found at {} or {}. \
+         Place the PyInstaller-built binary at cliniclink-desktop/src-tauri/sidecars/r42-cliniclink before running `npm run tauri-build`.",
+        base.display(),
+        with_exe.display()
+    ))
+}
+
+pub async fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
+    let sidecar_path = resolve_sidecar_path(app)?;
+
+    let mut cmd = Command::new(&sidecar_path);
     cmd.arg("sidecar")
         .arg("--port")
         .arg("2842")
