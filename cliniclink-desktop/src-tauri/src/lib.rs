@@ -5,7 +5,20 @@ use tauri::{Manager, State};
 
 #[tauri::command]
 async fn get_sidecar_port(state: State<'_, SidecarState>) -> Result<u16, String> {
-    Ok(*state.port.lock().unwrap())
+    let child_guard = state
+        .child
+        .lock()
+        .map_err(|e| format!("sidecar child lock poisoned: {}", e))?;
+    if child_guard.is_none() {
+        return Err("sidecar is not running".to_string());
+    }
+    drop(child_guard);
+
+    let port_guard = state
+        .port
+        .lock()
+        .map_err(|e| format!("sidecar port lock poisoned: {}", e))?;
+    Ok(*port_guard)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

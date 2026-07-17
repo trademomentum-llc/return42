@@ -28,18 +28,24 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
         .arg("2842")
         .arg("--host")
         .arg("127.0.0.1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("failed to spawn sidecar: {}", e))?;
 
     // In a real implementation, parse stdout for SIDECAR_PORT=...
-    // For this plan, assume port 2842 and verify health.
+    // For this plan, assume port 2842.
     let port = 2842u16;
     {
         let state: State<SidecarState> = app.state();
-        *state.child.lock().unwrap() = Some(child);
-        *state.port.lock().unwrap() = port;
+        *state
+            .child
+            .lock()
+            .map_err(|e| format!("sidecar child lock poisoned: {}", e))? = Some(child);
+        *state
+            .port
+            .lock()
+            .map_err(|e| format!("sidecar port lock poisoned: {}", e))? = port;
     }
 
     Ok(port)
@@ -47,9 +53,17 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
 
 pub fn kill_sidecar(app: &AppHandle) -> Result<(), String> {
     let state: State<SidecarState> = app.state();
-    if let Some(mut child) = state.child.lock().unwrap().take() {
-        let _ = child.kill();
-        let _ = child.wait();
+    let mut child_guard = state
+        .child
+        .lock()
+        .map_err(|e| format!("sidecar child lock poisoned: {}", e))?;
+    if let Some(mut child) = child_guard.take() {
+        child
+            .kill()
+            .map_err(|e| format!("failed to kill sidecar: {}", e))?;
+        child
+            .wait()
+            .map_err(|e| format!("failed to wait for sidecar: {}", e))?;
     }
     Ok(())
 }
