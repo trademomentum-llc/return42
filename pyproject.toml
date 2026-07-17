@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 r42-observe = "return42.observability.cli:app"
+r42-cliniclink = "return42.cliniclink.cli:app"
 
 [project.optional-dependencies]
 dev = [

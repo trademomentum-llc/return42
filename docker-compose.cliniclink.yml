@@ -1,0 +1,33 @@
+services:
+  cliniclink-gateway:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY pyproject.toml ./
+        COPY src ./src
+        RUN pip install -e ".[dev]"
+        CMD ["r42-cliniclink", "gateway", "--node-id", "clinic-a", "--transport", "mqtt"]
+    ports:
+      - "8000:8000"
+    environment:
+      - EVIDENCE_LOG_DIR=/app/evidence
+      - CLINICLINK_DB_PATH=/app/data/cliniclink.db
+      - CLINICLINK_QUEUE_DB_PATH=/app/data/cliniclink_queue.db
+      - CLINIC_TOKEN=${CLINIC_TOKEN:-clinic-local-token}
+      - TRUSTED_PEERS=${TRUSTED_PEERS:-}
+      - TRUST_ON_FIRST_USE=${TRUST_ON_FIRST_USE:-0}
+    volumes:
+      - ./evidence:/app/evidence
+      - cliniclink-data:/app/data
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+volumes:
+  cliniclink-data:
