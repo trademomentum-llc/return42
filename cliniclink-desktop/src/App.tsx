@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import ModeSelector from './components/ModeSelector';
+import ClinicView from './components/ClinicView';
 import { useAppStore } from './store/appStore';
 import { getMode } from './api/sidecar';
 
@@ -25,7 +26,7 @@ export default function App() {
         <h1 className="text-2xl font-bold text-teal-700">ClinicLink Desktop</h1>
         <span className="text-sm uppercase tracking-wide text-gray-500">{mode} mode</span>
       </header>
-      <p>Mode: {mode}</p>
+      {mode === 'clinic' ? <ClinicView /> : <p>Mode: {mode}</p>}
     </div>
   );
 }
