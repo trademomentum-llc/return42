@@ -15,4 +15,5 @@ evidence/
 build/
 dist/
 *.spec
+.superpowers/
 

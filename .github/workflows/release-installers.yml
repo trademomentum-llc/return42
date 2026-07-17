@@ -1,0 +1,110 @@
+name: Build Release Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach installers to (e.g. v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller
+
+      - name: Build macOS installer
+        run: python scripts/build_macos_installer.py
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name || github.event.inputs.tag }}"
+          gh release upload "$TAG" \
+            build/Return42-ClinicLink-*-macOS.pkg \
+            build/Return42-ClinicLink-*-macOS.dmg \
+            --clobber
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Build Linux installer
+        run: python scripts/build_linux_installer.py
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name || github.event.inputs.tag }}"
+          gh release upload "$TAG" \
+            build/Return42-ClinicLink-*-linux-x86_64.deb \
+            build/Return42-ClinicLink-*-linux-x86_64.tar.gz \
+            --clobber
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller
+
+      - name: Build Windows binaries
+        run: |
+          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin .venv\Scripts\r42-cliniclink.exe
+          pyinstaller --onefile --name r42-observe --distpath build\installer\bin .venv\Scripts\r42-observe.exe
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+
+      - name: Build Windows installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts\build_windows_installer.iss
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag) { $tag = "${{ github.event.inputs.tag }}" }
+          gh release upload $tag build\Return42-ClinicLink-*-Windows-x86_64.exe --clobber
