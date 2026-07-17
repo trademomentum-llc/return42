@@ -91,10 +91,9 @@ jobs:
 
       - name: Build Windows binaries
         run: |
-          $cliniclink = python -c "import shutil; print(shutil.which('r42-cliniclink'))"
-          $observe = python -c "import shutil; print(shutil.which('r42-observe'))"
-          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin "$cliniclink"
-          pyinstaller --onefile --name r42-observe --distpath build\installer\bin "$observe"
+          $scripts = python -c "import sys, pathlib; print(pathlib.Path(sys.executable).parent / 'Scripts')"
+          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin "$scripts\r42-cliniclink-script.py"
+          pyinstaller --onefile --name r42-observe --distpath build\installer\bin "$scripts\r42-observe-script.py"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
