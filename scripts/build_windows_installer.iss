@@ -16,7 +16,6 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\Return42
 DisableProgramGroupPage=yes
-LicenseFile=..\LICENSE
 OutputDir=..\build
 OutputBaseFilename=Return42-ClinicLink-1.0.0-Windows-x86_64
 Compression=lzma
