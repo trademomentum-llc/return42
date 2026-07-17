@@ -254,7 +254,7 @@ docker compose -f docker-compose.cliniclink.yml up --build
 | `TRUSTED_PEERS` | — | Comma-separated `node_id:verify_key_b64` pre-enrolled peers |
 | `TRUST_ON_FIRST_USE` | `false` | Auto-trust discovered peers when `1`/`true`/`yes` |
 | `CLINIC_TOKEN` | `clinic-local-token` | Bearer token for reading and acknowledging handoffs |
-| `CLINICLINK_ADMIN_TOKEN` | *(value of `CLINIC_TOKEN`)* | Bearer token for HTTP handoff submission |
+| `CLINICLINK_ADMIN_TOKEN` | — | Bearer token for HTTP handoff submission (required; no default) |
 | `CLINICLINK_DB_PATH` | `cliniclink.db` | SQLite path for handoffs |
 | `CLINICLINK_QUEUE_DB_PATH` | `cliniclink_queue.db` | SQLite path for sync queue |
 | `CLINICLINK_HEARTBEAT_INTERVAL` | `5.0` | Mesh heartbeat interval in seconds |

@@ -21,7 +21,9 @@ services:
       - CLINICLINK_DB_PATH=/app/data/cliniclink.db
       - CLINICLINK_QUEUE_DB_PATH=/app/data/cliniclink_queue.db
       - CLINIC_TOKEN=${CLINIC_TOKEN:-clinic-local-token}
-      - CLINICLINK_ADMIN_TOKEN=${CLINICLINK_ADMIN_TOKEN:-${CLINIC_TOKEN:-clinic-local-token}}
+      # Generate a separate admin token for HTTP submit. Do not fall back to
+      # CLINIC_TOKEN; doing so collapses read and write privileges.
+      - CLINICLINK_ADMIN_TOKEN=${CLINICLINK_ADMIN_TOKEN:?CLINICLINK_ADMIN_TOKEN must be set}
       - TRUSTED_PEERS=${TRUSTED_PEERS:-}
       - TRUST_ON_FIRST_USE=${TRUST_ON_FIRST_USE:-0}
       - CLINICLINK_HEARTBEAT_INTERVAL=${CLINICLINK_HEARTBEAT_INTERVAL:-5.0}
