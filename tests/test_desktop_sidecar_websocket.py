@@ -3,14 +3,21 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 from return42.cliniclink.desktop_sidecar.app import create_sidecar_app
+from return42.cliniclink.desktop_sidecar.state import STATE
+from return42.cliniclink.desktop_sidecar.websocket import MANAGER
 
 
 @pytest.fixture
 def client(tmp_path):
+    # Isolate this test from other sidecar tests that share global STATE/MANAGER.
+    STATE.mode = None
+    MANAGER._connections.clear()
     app = create_sidecar_app()
     app.state.sidecar_db = str(tmp_path / "cliniclink.db")
     app.state.sidecar_queue_db = str(tmp_path / "cliniclink_queue.db")
-    return TestClient(app)
+    yield TestClient(app)
+    STATE.mode = None
+    MANAGER._connections.clear()
 
 
 def _receive_json_with_timeout(ws, timeout=1.0):
