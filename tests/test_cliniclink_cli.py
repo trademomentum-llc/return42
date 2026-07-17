@@ -16,3 +16,13 @@ def test_gateway_help():
     assert "--node-id" in result.output
     assert "--api-port" in result.output
     assert "--api-host" in result.output
+
+
+def test_cli_has_sidecar_command():
+    from return42.cliniclink.cli import app
+    from typer.testing import CliRunner
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["sidecar", "--help"])
+    assert result.exit_code == 0
+    assert "sidecar" in result.output.lower()
