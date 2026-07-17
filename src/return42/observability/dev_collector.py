@@ -76,8 +76,8 @@ class DevelopmentCollector:
             self._collect_coverage(coverage_xml)
 
     def _collect_coverage(self, coverage_xml: str | Path) -> None:
-        repo_root = os.path.abspath(self._repo_path)
-        xml_path_str = os.path.abspath(os.path.normpath(os.path.join(repo_root, str(coverage_xml))))
+        repo_root = os.path.realpath(self._repo_path)
+        xml_path_str = os.path.realpath(os.path.normpath(os.path.join(repo_root, str(coverage_xml))))
         if not (xml_path_str == repo_root or xml_path_str.startswith(f"{repo_root}{os.sep}")):
             return
 
