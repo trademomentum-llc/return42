@@ -2,12 +2,19 @@ import { useHandoffs, useAcknowledgeHandoff } from '../hooks/useHandoffs';
 import { useSidecarEvent } from '../hooks/useEvents';
 import HandoffCard from './HandoffCard';
 
+let alertCtx: AudioContext | null = null;
+
 function playAlert() {
-  const ctx = new AudioContext();
-  const osc = ctx.createOscillator();
-  osc.connect(ctx.destination);
+  if (!alertCtx) {
+    alertCtx = new AudioContext();
+  }
+  if (alertCtx.state === 'suspended') {
+    alertCtx.resume();
+  }
+  const osc = alertCtx.createOscillator();
+  osc.connect(alertCtx.destination);
   osc.start();
-  osc.stop(ctx.currentTime + 0.2);
+  osc.stop(alertCtx.currentTime + 0.2);
 }
 
 export default function ClinicView() {
