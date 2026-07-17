@@ -12,3 +12,7 @@ prometheus-data/
 grafana-data/
 evidence/
 .DS_Store
+build/
+dist/
+*.spec
+
