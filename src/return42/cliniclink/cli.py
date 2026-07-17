@@ -21,8 +21,6 @@ from .gateway import ClinicGatewayController
 from .queue import SyncQueue
 from .store import HandoffStore
 
-sidecar_app = typer.Typer()
-
 app = typer.Typer(help="ClinicLink ambulance-to-clinic handoff")
 
 
@@ -140,17 +138,16 @@ def gateway(
     asyncio.run(run())
 
 
-@sidecar_app.command()
+@app.command()
 def sidecar(
-    port: Annotated[int, typer.Option("--port", help="Port to bind the sidecar HTTP/WebSocket server")] = 2842,
-    host: Annotated[str, typer.Option("--host", help="Host to bind")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Port to bind the sidecar HTTP/WebSocket server")] = int(
+        os.environ.get("CLINICLINK_SIDECAR_PORT", "2842")
+    ),
 ) -> None:
     """Run the ClinicLink desktop sidecar."""
-    import uvicorn
     from return42.cliniclink.desktop_sidecar.app import create_sidecar_app
 
-    app = create_sidecar_app()
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    sidecar_app = create_sidecar_app()
+    uvicorn.run(sidecar_app, host="127.0.0.1", port=port, log_level="info")
 
 
-app.add_typer(sidecar_app, name="sidecar")

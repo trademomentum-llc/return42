@@ -26,3 +26,6 @@ def test_cli_has_sidecar_command():
     result = runner.invoke(app, ["sidecar", "--help"])
     assert result.exit_code == 0
     assert "sidecar" in result.output.lower()
+    assert "--port" in result.output
+    # The command must be a leaf: there must be no nested "sidecar sidecar" path.
+    assert "sidecar sidecar" not in result.output.lower()
