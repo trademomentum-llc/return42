@@ -26,11 +26,12 @@ class AmbulanceService:
     async def start(self) -> None:
         from return42.cliniclink.ambulance_client import AmbulanceSyncClient
 
+        self.trust_store = TrustStore(tofu=True)
         self.client = AmbulanceSyncClient(
             identity=self.identity,
             transport=self.transport,
             clinic_id=os.getenv("TARGET_CLINIC_ID", "clinic-a"),
-            trust_store=TrustStore(tofu=True),
+            trust_store=self.trust_store,
         )
         await self.client.start()
 
@@ -50,7 +51,7 @@ class AmbulanceService:
         @router.get("/clinics")
         async def list_clinics() -> list[dict]:
             peers = self.client.controller.peers if self.client else set()
-            trust_store = self.client.controller._trust_store if self.client else TrustStore(tofu=True)
+            trust_store = self.trust_store if self.client else TrustStore(tofu=True)
             return [
                 {"node_id": node_id, "verify_key_b64": trust_store.get_key(node_id) or ""}
                 for node_id in peers
