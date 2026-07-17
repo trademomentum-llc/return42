@@ -70,13 +70,14 @@ r42-cliniclink gateway --node-id clinic-a --transport mqtt
 | GET | `/health` | Service health |
 | GET | `/handoffs` | List handoffs, optional `status` filter |
 | GET | `/handoffs/{handoff_id}` | Get one handoff |
-| POST | `/handoffs` | Submit a new handoff |
+| POST | `/handoffs` | Submit a new handoff (requires `CLINIC_TOKEN`; local/admin use only) |
 | POST | `/handoffs/{handoff_id}/ack` | Acknowledge a handoff (requires `CLINIC_TOKEN`) |
 
-Example handoff submission:
+Example handoff submission (local/admin use only; production handoffs use the signed mesh path):
 
 ```bash
 curl -X POST http://localhost:8000/handoffs \
+  -H "Authorization: Bearer $CLINIC_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "handoff_id": "ho-12345",
@@ -100,6 +101,8 @@ curl -X POST http://localhost:8000/handoffs/ho-12345/ack \
 ## Dashboard
 
 Open http://localhost:8000 in a browser. The dashboard prompts for the clinic token, then polls `/handoffs?status=pending` every five seconds and shows an **Acknowledge** button for each pending handoff.
+
+The token is kept in `sessionStorage` so it is cleared when the browser tab closes. This reduces the risk of a leaked token on a shared workstation, but staff must re-enter it after closing the tab.
 
 ## Mesh handoff flow
 

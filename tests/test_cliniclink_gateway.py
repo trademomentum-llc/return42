@@ -6,6 +6,7 @@ from return42.cliniclink.models import PatientHandoff
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.transport import InMemoryTransport
 from return42.mesh.trust import TrustStore
+from return42.observability.telemetry import TelemetryBus
 from tests.conftest import _wait_for
 
 
@@ -57,6 +58,60 @@ async def test_gateway_persists_handoff_from_ambulance(tmp_path):
 
     inbound = gateway.queue.dequeue("inbound")
     assert any(record["payload"]["handoff_id"] == "ho-gw-1" for record in inbound)
+
+    received = gateway.telemetry.events("cliniclink.handoff.received")
+    assert any(e.payload.get("handoff_id") == "ho-gw-1" for e in received)
+
+    await ambulance.stop()
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_rejects_untrusted_ambulance(tmp_path):
+    bus = InMemoryTransport()
+    ambulance_identity = NodeIdentity.generate("amb-1")
+    clinic_identity = NodeIdentity.generate("clinic-a")
+
+    # Clinic does not trust amb-1
+    clinic_store = TrustStore(tofu=False)
+
+    db_path = tmp_path / "clinic.db"
+    queue_path = tmp_path / "queue.db"
+    telemetry_bus = TelemetryBus()
+
+    gateway = ClinicGatewayController(
+        identity=clinic_identity,
+        transport=bus,
+        db_path=str(db_path),
+        queue_db_path=str(queue_path),
+        trust_store=clinic_store,
+        telemetry_bus=telemetry_bus,
+    )
+
+    ambulance = AmbulanceSyncClient(
+        identity=ambulance_identity,
+        transport=bus,
+        clinic_id="clinic-a",
+        trust_store=TrustStore(tofu=False, trusted_peers={"clinic-a": clinic_identity.verify_key_b64}),
+    )
+
+    await gateway.start()
+    await ambulance.start()
+
+    await _wait_for(lambda: len(gateway.controller.peers) == 1)
+
+    handoff = PatientHandoff(
+        handoff_id="ho-gw-untrusted",
+        patient_id="p-1",
+        ambulance_id="amb-1",
+        clinic_id="clinic-a",
+    )
+    await ambulance.submit_handoff(handoff)
+
+    # Give the controller time to reject the command.
+    await _wait_for(lambda: len(telemetry_bus.events("mesh.command.rejected")) >= 1, timeout=2.0)
+
+    assert gateway.store.get("ho-gw-untrusted") is None
 
     await ambulance.stop()
     await gateway.stop()

@@ -12,6 +12,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - NODE_ID=clinic-a
       - EVIDENCE_LOG_DIR=/app/evidence
       - CLINICLINK_DB_PATH=/app/data/cliniclink.db
       - CLINICLINK_QUEUE_DB_PATH=/app/data/cliniclink_queue.db

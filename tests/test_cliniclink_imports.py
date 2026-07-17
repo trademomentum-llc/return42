@@ -7,3 +7,5 @@ def test_cliniclink_package_imports():
     import return42.cliniclink.api
     import return42.cliniclink.dashboard
     import return42.cliniclink.ambulance_client
+    import return42.cliniclink.cli
+    import return42.cliniclink.gateway
