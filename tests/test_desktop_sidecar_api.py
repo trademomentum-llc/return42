@@ -66,3 +66,26 @@ def test_clinic_handoffs_missing_auth(client, monkeypatch):
     monkeypatch.setenv("CLINIC_TOKEN", "clinic-token")
     r = client.get("/clinic/handoffs")
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ambulance_create_handoff(client, monkeypatch):
+    monkeypatch.setenv("CLINICLINK_ADMIN_TOKEN", "admin-token")
+
+    r = client.post("/mode", json={"mode": "ambulance"})
+    assert r.status_code == 200
+
+    payload = {
+        "handoff_id": "ho-amb-1",
+        "patient_id": "p-1",
+        "clinic_id": "clinic-a",
+        "chief_complaint": "chest pain",
+        "eta_minutes": 10,
+    }
+    r = client.post(
+        "/ambulance/handoffs",
+        json=payload,
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert r.status_code == 201
+    assert r.json()["status"] == "queued"

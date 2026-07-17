@@ -4,18 +4,31 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from .ambulance_service import AmbulanceService
 from .clinic_service import ClinicService
 from .state import STATE, SidecarMode
 from .websocket import MANAGER
 
 
+def _ensure_clinic_service(app: FastAPI) -> ClinicService:
+    """Return the clinic service, creating and mounting it lazily if needed."""
+    if not hasattr(app.state, "clinic_service"):
+        clinic_service = ClinicService(db_path=app.state.sidecar_db, queue_db_path=app.state.sidecar_queue_db)
+        app.include_router(clinic_service.get_router(), prefix="/clinic")
+        app.state.clinic_service = clinic_service
+    return app.state.clinic_service
+
+
 def create_sidecar_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        clinic_service = ClinicService(db_path=app.state.sidecar_db, queue_db_path=app.state.sidecar_queue_db)
-        app.include_router(clinic_service.get_router(), prefix="/clinic")
+        clinic_service = _ensure_clinic_service(app)
         STATE.service = clinic_service
-        yield
+        try:
+            yield
+        finally:
+            if STATE.service is not None and hasattr(STATE.service, "stop"):
+                await STATE.service.stop()
 
     app = FastAPI(title="ClinicLink Desktop Sidecar", version="1.0.0", lifespan=lifespan)
     app.state.sidecar_db = None
@@ -34,7 +47,24 @@ def create_sidecar_app() -> FastAPI:
         mode = payload.get("mode")
         if mode not in {SidecarMode.CLINIC.value, SidecarMode.AMBULANCE.value}:
             raise ValueError("invalid mode")
-        STATE.mode = SidecarMode(mode)
+
+        new_mode = SidecarMode(mode)
+        if new_mode == SidecarMode.AMBULANCE and not isinstance(STATE.service, AmbulanceService):
+            if STATE.service is not None and hasattr(STATE.service, "stop"):
+                await STATE.service.stop()
+            ambulance_service = AmbulanceService(
+                db_path=app.state.sidecar_db, queue_db_path=app.state.sidecar_queue_db
+            )
+            await ambulance_service.start()
+            app.include_router(ambulance_service.get_router(), prefix="/ambulance")
+            STATE.service = ambulance_service
+
+        if new_mode == SidecarMode.CLINIC and not isinstance(STATE.service, ClinicService):
+            if STATE.service is not None and hasattr(STATE.service, "stop"):
+                await STATE.service.stop()
+            STATE.service = _ensure_clinic_service(app)
+
+        STATE.mode = new_mode
         await MANAGER.broadcast("mode.changed", {"mode": STATE.mode.value})
         return {"mode": STATE.mode.value}
 
