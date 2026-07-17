@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from return42.mesh.trust import TrustStore
 
 
@@ -8,6 +10,7 @@ class ClinicPolicy:
 
     def __init__(self, trust_store: TrustStore) -> None:
         self._trust_store = trust_store
+        self._clinic_token = os.getenv("CLINIC_TOKEN", "clinic-local-token")
 
     def can_submit_handoff(self, ambulance_id: str, verify_key_b64: str) -> bool:
         """An ambulance may submit a handoff if it is trusted and its advertised key matches."""
@@ -19,7 +22,4 @@ class ClinicPolicy:
 
     def can_acknowledge(self, clinic_token: str) -> bool:
         """Clinic staff acknowledge via a local bearer token."""
-        return bool(clinic_token and clinic_token == self._clinic_token())
-
-    def _clinic_token(self) -> str:
-        return "clinic-local-token"  # overridden by env in Task 6
+        return bool(clinic_token and clinic_token == self._clinic_token)
