@@ -1,0 +1,9 @@
+def test_cliniclink_package_imports():
+    import return42.cliniclink
+    import return42.cliniclink.models
+    import return42.cliniclink.store
+    import return42.cliniclink.policy
+    import return42.cliniclink.queue
+    import return42.cliniclink.api
+    import return42.cliniclink.dashboard
+    import return42.cliniclink.ambulance_client
