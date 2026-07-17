@@ -177,6 +177,66 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the get_sidecar_port command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-sidecar-port",
+          "markdownDescription": "Enables the get_sidecar_port command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the has_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-has-secret",
+          "markdownDescription": "Enables the has_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-mode",
+          "markdownDescription": "Enables the set_mode command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the sidecar_request command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sidecar-request",
+          "markdownDescription": "Enables the sidecar_request command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the store_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-store-secret",
+          "markdownDescription": "Enables the store_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_sidecar_port command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-sidecar-port",
+          "markdownDescription": "Denies the get_sidecar_port command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the has_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-has-secret",
+          "markdownDescription": "Denies the has_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-mode",
+          "markdownDescription": "Denies the set_mode command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sidecar_request command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sidecar-request",
+          "markdownDescription": "Denies the sidecar_request command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the store_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-store-secret",
+          "markdownDescription": "Denies the store_secret command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for the ClinicLink Desktop main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-get-sidecar-port",
+    "allow-sidecar-request",
+    "allow-set-mode",
+    "allow-store-secret",
+    "allow-has-secret"
+  ]
+}

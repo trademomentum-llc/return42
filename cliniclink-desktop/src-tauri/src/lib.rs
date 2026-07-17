@@ -9,9 +9,22 @@ async fn store_secret(key: String, value: String) -> Result<(), String> {
     secrets::store_secret(&key, &value).await
 }
 
+/// Returns whether a secret exists without exposing its value to the frontend.
+/// Only keys the frontend is allowed to store may be queried.
 #[tauri::command]
-async fn read_secret(key: String) -> Result<Option<String>, String> {
-    secrets::read_secret(&key).await
+async fn has_secret(key: String) -> Result<bool, String> {
+    if !secrets::ALLOWED_STORE_KEYS.contains(&key.as_str()) {
+        return Err(format!(
+            "key '{}' is not allowed; only {:?} may be queried",
+            key,
+            secrets::ALLOWED_STORE_KEYS
+        ));
+    }
+    match secrets::read_secret(&key).await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Ok(false),
+        Err(e) => Err(e),
+    }
 }
 
 #[tauri::command]
@@ -116,7 +129,7 @@ pub fn run() {
             sidecar_request,
             set_mode,
             store_secret,
-            read_secret
+            has_secret
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

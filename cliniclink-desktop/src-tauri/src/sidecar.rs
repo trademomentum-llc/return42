@@ -3,6 +3,18 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
+/// Reads a secret for injection into the sidecar environment.
+/// Logs a warning on errors other than `NoEntry` without ever logging the value.
+async fn sidecar_secret(key: &str) -> Option<String> {
+    match secrets::read_secret(key).await {
+        Ok(value) => value,
+        Err(e) => {
+            eprintln!("warning: failed to read secret '{}': {}", key, e);
+            None
+        }
+    }
+}
+
 pub struct SidecarState {
     pub child: Mutex<Option<Child>>,
     pub port: Mutex<u16>,
@@ -32,13 +44,13 @@ pub async fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    if let Ok(Some(key)) = secrets::read_secret("NODE_SIGNING_KEY").await {
+    if let Some(key) = sidecar_secret("NODE_SIGNING_KEY").await {
         cmd.env("NODE_SIGNING_KEY", key);
     }
-    if let Ok(Some(token)) = secrets::read_secret("CLINIC_TOKEN").await {
+    if let Some(token) = sidecar_secret("CLINIC_TOKEN").await {
         cmd.env("CLINIC_TOKEN", token);
     }
-    if let Ok(Some(token)) = secrets::read_secret("CLINICLINK_ADMIN_TOKEN").await {
+    if let Some(token) = sidecar_secret("CLINICLINK_ADMIN_TOKEN").await {
         cmd.env("CLINICLINK_ADMIN_TOKEN", token);
     }
 

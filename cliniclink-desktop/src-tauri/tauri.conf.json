@@ -19,7 +19,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:* ws://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:* ws://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+      "capabilities": ["default"]
     }
   },
   "bundle": {
