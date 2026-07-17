@@ -18,13 +18,15 @@ def create_app(
     db_path: str | None = None,
     queue_db_path: str | None = None,
     trust_store: TrustStore | None = None,
+    store: HandoffStore | None = None,
+    queue: SyncQueue | None = None,
 ) -> FastAPI:
     db_path = db_path or os.getenv("CLINICLINK_DB_PATH", "cliniclink.db")
     queue_db_path = queue_db_path or os.getenv("CLINICLINK_QUEUE_DB_PATH", "cliniclink_queue.db")
     trust_store = trust_store or TrustStore.from_env()
 
-    store = HandoffStore(db_path)
-    queue = SyncQueue(queue_db_path)
+    store = store or HandoffStore(db_path)
+    queue = queue or SyncQueue(queue_db_path)
     policy = ClinicPolicy(trust_store)
 
     app = FastAPI(title="ClinicLink", version="0.1.0")

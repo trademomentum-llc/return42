@@ -14,3 +14,5 @@ def test_gateway_help():
     result = runner.invoke(app, ["gateway", "--help"])
     assert result.exit_code == 0
     assert "--node-id" in result.output
+    assert "--api-port" in result.output
+    assert "--api-host" in result.output

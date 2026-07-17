@@ -20,10 +20,12 @@ class ClinicGatewayController:
         db_path: str,
         queue_db_path: str,
         trust_store: TrustStore | None = None,
+        store: HandoffStore | None = None,
+        queue: SyncQueue | None = None,
     ) -> None:
         self._identity = identity
-        self._store = HandoffStore(db_path)
-        self._queue = SyncQueue(queue_db_path)
+        self._store = store or HandoffStore(db_path)
+        self._queue = queue or SyncQueue(queue_db_path)
         self._controller = SmeshController(
             identity,
             transport,
