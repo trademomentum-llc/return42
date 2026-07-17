@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { sidecarRequest } from '../api/sidecar';
 
-const ADMIN_TOKEN = 'admin-token'; // load from secure storage in later task
+// TODO(Task 15): move to secure storage
+const ADMIN_TOKEN = import.meta.env.VITE_CLINICLINK_ADMIN_TOKEN || 'admin-token';
 
 interface Props {
   clinicId: string;
@@ -24,8 +25,8 @@ export default function HandoffForm({ clinicId, onSent }: Props) {
     let etaMinutes: number | null = null;
     if (eta.trim() !== '') {
       const parsed = parseInt(eta, 10);
-      if (Number.isNaN(parsed)) {
-        setEtaError('ETA must be a number.');
+      if (!(Number.isInteger(parsed) && parsed >= 0)) {
+        setEtaError('ETA must be a non-negative whole number.');
         return;
       }
       etaMinutes = parsed;
