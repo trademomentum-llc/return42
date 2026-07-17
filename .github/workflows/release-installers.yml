@@ -37,7 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name || github.event.inputs.tag }}"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           gh release upload "$TAG" \
             build/Return42-ClinicLink-*-macOS.pkg \
             build/Return42-ClinicLink-*-macOS.dmg \
@@ -68,7 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name || github.event.inputs.tag }}"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           gh release upload "$TAG" \
             build/Return42-ClinicLink-*-linux-x86_64.deb \
             build/Return42-ClinicLink-*-linux-x86_64.tar.gz \
@@ -91,8 +91,10 @@ jobs:
 
       - name: Build Windows binaries
         run: |
-          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin .venv\Scripts\r42-cliniclink.exe
-          pyinstaller --onefile --name r42-observe --distpath build\installer\bin .venv\Scripts\r42-observe.exe
+          $cliniclink = python -c "import shutil; print(shutil.which('r42-cliniclink'))"
+          $observe = python -c "import shutil; print(shutil.which('r42-observe'))"
+          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin "$cliniclink"
+          pyinstaller --onefile --name r42-observe --distpath build\installer\bin "$observe"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
@@ -105,6 +107,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = "${{ github.ref_name }}"
-          if (-not $tag) { $tag = "${{ github.event.inputs.tag }}" }
+          $tag = "${{ github.event.inputs.tag }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
           gh release upload $tag build\Return42-ClinicLink-*-Windows-x86_64.exe --clobber

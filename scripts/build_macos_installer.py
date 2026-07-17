@@ -43,6 +43,17 @@ def run(cmd: list[str], cwd: Path | None = None) -> None:
     subprocess.run(cmd, cwd=cwd, check=True)
 
 
+def _find_script(name: str) -> str:
+    # Prefer a virtual environment if one exists locally, otherwise use PATH.
+    venv_script = ROOT / ".venv" / "bin" / name
+    if venv_script.exists():
+        return str(venv_script)
+    path = shutil.which(name)
+    if path:
+        return path
+    raise RuntimeError(f"Could not find {name} script in .venv or PATH")
+
+
 def build_binaries() -> None:
     BIN_DIR.mkdir(parents=True, exist_ok=True)
     for script in ("r42-cliniclink", "r42-observe"):
@@ -56,7 +67,7 @@ def build_binaries() -> None:
                 script,
                 "--distpath",
                 str(BIN_DIR),
-                str(ROOT / ".venv" / "bin" / script),
+                _find_script(script),
             ],
             cwd=ROOT,
         )
