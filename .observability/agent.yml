@@ -1,0 +1,26 @@
+project: return42
+language: python
+git:
+  enabled: true
+test:
+  - name: pytest
+    command:
+      - .venv/bin/python
+      - -m
+      - pytest
+      - -q
+    parser: pytest
+    timeout: 300
+build:
+  - name: hatch-build
+    command:
+      - .venv/bin/python
+      - -m
+      - build
+    parser: shell-exit
+    timeout: 300
+artifacts:
+  - name: wheel
+    path: dist/return42-1.0.0-py3-none-any.whl
+  - name: sdist
+    path: dist/return42-1.0.0.tar.gz
