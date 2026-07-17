@@ -1,13 +1,24 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from .clinic_service import ClinicService
 from .state import STATE, SidecarMode
 from .websocket import MANAGER
 
 
 def create_sidecar_app() -> FastAPI:
-    app = FastAPI(title="ClinicLink Desktop Sidecar", version="1.0.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        clinic_service = ClinicService(db_path=app.state.sidecar_db, queue_db_path=app.state.sidecar_queue_db)
+        app.include_router(clinic_service.get_router(), prefix="/clinic")
+        yield
+
+    app = FastAPI(title="ClinicLink Desktop Sidecar", version="1.0.0", lifespan=lifespan)
+    app.state.sidecar_db = None
+    app.state.sidecar_queue_db = None
 
     @app.get("/health")
     def health() -> dict[str, str]:
