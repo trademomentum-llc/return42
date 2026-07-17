@@ -91,9 +91,8 @@ jobs:
 
       - name: Build Windows binaries
         run: |
-          $scripts = python -c "import sys, pathlib; print(pathlib.Path(sys.executable).parent / 'Scripts')"
-          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin "$scripts\r42-cliniclink-script.py"
-          pyinstaller --onefile --name r42-observe --distpath build\installer\bin "$scripts\r42-observe-script.py"
+          pyinstaller --onefile --name r42-cliniclink --distpath build\installer\bin scripts\windows_entrypoints\r42-cliniclink.py
+          pyinstaller --onefile --name r42-observe --distpath build\installer\bin scripts\windows_entrypoints\r42-observe.py
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
