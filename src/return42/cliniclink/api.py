@@ -30,6 +30,7 @@ def create_app(
     store: HandoffStore | None = None,
     queue: SyncQueue | None = None,
     telemetry_bus: TelemetryBus | None = None,
+    node_id: str | None = None,
 ) -> FastAPI:
     db_path = db_path or os.getenv("CLINICLINK_DB_PATH", "cliniclink.db")
     queue_db_path = queue_db_path or os.getenv("CLINICLINK_QUEUE_DB_PATH", "cliniclink_queue.db")
@@ -39,7 +40,7 @@ def create_app(
     queue = queue or SyncQueue(queue_db_path)
     policy = ClinicPolicy(trust_store)
     telemetry = telemetry_bus or TelemetryBus()
-    node_id = os.getenv("NODE_ID", "cliniclink")
+    node_id = node_id or os.getenv("NODE_ID", "clinic-a")
 
     def _emit(name: str, payload: dict) -> None:
         telemetry.publish(
@@ -59,25 +60,33 @@ def create_app(
 
     def _require_clinic_token(authorization: str | None) -> None:
         token = _bearer_token(authorization)
-        if not policy.can_acknowledge(token):
+        if not policy.can_read(token):
             raise HTTPException(status_code=403, detail="invalid clinic token")
 
     @app.post("/handoffs", status_code=201)
     async def submit_handoff(
         payload: dict[str, Any], authorization: str | None = Header(default=None)
     ) -> PatientHandoff:
-        # HTTP submit is restricted to local staff/admin holding the clinic token.
+        # HTTP submit is restricted to local staff/admin holding CLINICLINK_ADMIN_TOKEN.
         # The mesh path via ClinicGatewayController is the production-signed path.
-        _require_clinic_token(authorization)
+        token = _bearer_token(authorization)
+        if not policy.can_submit_http_handoff(token):
+            raise HTTPException(status_code=403, detail="invalid admin token")
         try:
             handoff = PatientHandoff.from_payload(payload)
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        if handoff.clinic_id != node_id:
+            raise HTTPException(status_code=400, detail="clinic_id does not match this gateway")
         try:
             await asyncio.to_thread(store.create, handoff)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         await asyncio.to_thread(queue.enqueue, handoff, "inbound")
+        _emit(
+            "cliniclink.handoff.received",
+            {"source": "http", "handoff_id": handoff.handoff_id, "success": True},
+        )
         return handoff
 
     @app.get("/handoffs")

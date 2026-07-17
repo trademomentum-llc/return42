@@ -22,3 +22,12 @@ def test_queue_mark_done(queue):
     pending = queue.dequeue("inbound")
     queue.mark_done(pending[0]["id"])
     assert len(queue.dequeue("inbound")) == 0
+
+
+def test_queue_enqueue_is_idempotent(queue):
+    handoff = PatientHandoff(handoff_id="ho-1", patient_id="p-1", ambulance_id="amb-1", clinic_id="c")
+    queue.enqueue(handoff, "inbound")
+    queue.enqueue(handoff, "inbound")
+    pending = queue.dequeue("inbound")
+    assert len(pending) == 1
+    assert pending[0]["payload"]["handoff_id"] == "ho-1"

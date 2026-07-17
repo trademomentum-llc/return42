@@ -117,6 +117,12 @@ def gateway(
 
         try:
             await stop_event.wait()
+        except KeyboardInterrupt:
+            # Windows does not support asyncio signal handlers, so Ctrl+C raises
+            # KeyboardInterrupt. Unix uses the signal handler above, but catching
+            # this here is harmless and keeps shutdown behavior uniform.
+            typer.echo("KeyboardInterrupt received, stopping gateway...")
+            stop_event.set()
         finally:
             server.should_exit = True
             await server_task

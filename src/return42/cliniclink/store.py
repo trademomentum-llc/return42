@@ -85,19 +85,18 @@ class HandoffStore:
         row = self._handoff_to_row(handoff)
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO handoffs (handoff_id, patient_id, ambulance_id, clinic_id,
                                       vital_signs, medications, chief_complaint, eta_minutes,
                                       status, created_at, acknowledged_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (handoff_id) DO NOTHING
+                ON CONFLICT (handoff_id) DO UPDATE SET handoff_id=handoff_id
+                RETURNING *
                 """,
                 row,
             )
-            existing = conn.execute(
-                "SELECT * FROM handoffs WHERE handoff_id = ?", (handoff.handoff_id,)
-            ).fetchone()
+            existing = cursor.fetchone()
         existing_handoff = self._row_to_handoff(existing)
         if not self._same_contents(existing_handoff, handoff):
             raise ValueError(

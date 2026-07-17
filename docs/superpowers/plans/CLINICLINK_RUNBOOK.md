@@ -70,14 +70,14 @@ r42-cliniclink gateway --node-id clinic-a --transport mqtt
 | GET | `/health` | Service health |
 | GET | `/handoffs` | List handoffs, optional `status` filter |
 | GET | `/handoffs/{handoff_id}` | Get one handoff |
-| POST | `/handoffs` | Submit a new handoff (requires `CLINIC_TOKEN`; local/admin use only) |
+| POST | `/handoffs` | Submit a new handoff (requires `CLINICLINK_ADMIN_TOKEN`; local/admin use only) |
 | POST | `/handoffs/{handoff_id}/ack` | Acknowledge a handoff (requires `CLINIC_TOKEN`) |
 
 Example handoff submission (local/admin use only; production handoffs use the signed mesh path):
 
 ```bash
 curl -X POST http://localhost:8000/handoffs \
-  -H "Authorization: Bearer $CLINIC_TOKEN" \
+  -H "Authorization: Bearer $CLINICLINK_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "handoff_id": "ho-12345",
@@ -165,10 +165,18 @@ TOFU is convenient for local development but should not be used in production.
 
 ### Clinic staff authentication
 
-Clinic staff authenticate to the acknowledgement endpoint with a bearer token configured by `CLINIC_TOKEN`. Generate a strong token for production:
+Clinic staff authenticate to the read and acknowledgement endpoints with a bearer token configured by `CLINIC_TOKEN`. Generate a strong token for production:
 
 ```bash
 export CLINIC_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+```
+
+### HTTP handoff submission
+
+The `POST /handoffs` endpoint is intended for local/admin use (for example, a back-office integration or manual replay). It requires a separate `CLINICLINK_ADMIN_TOKEN`. If `CLINICLINK_ADMIN_TOKEN` is not set, it defaults to the value of `CLINIC_TOKEN` and logs a warning that read/write tokens are not separated. For production, generate a distinct admin token:
+
+```bash
+export CLINICLINK_ADMIN_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 ```
 
 ### Security notes
@@ -193,6 +201,7 @@ The compose file uses a named volume `cliniclink-data` for the SQLite databases 
 
 ```bash
 CLINIC_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+CLINICLINK_ADMIN_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 TRUSTED_PEERS="amb-1:<amb-1-verify-key>"
 docker compose -f docker-compose.cliniclink.yml up --build
 ```
@@ -205,7 +214,8 @@ docker compose -f docker-compose.cliniclink.yml up --build
 | `NODE_SIGNING_KEY` | *(ephemeral)* | URL-safe base64 Ed25519 private key |
 | `TRUSTED_PEERS` | — | Comma-separated `node_id:verify_key_b64` pre-enrolled peers |
 | `TRUST_ON_FIRST_USE` | `false` | Auto-trust discovered peers when `1`/`true`/`yes` |
-| `CLINIC_TOKEN` | `clinic-local-token` | Bearer token for acknowledging handoffs |
+| `CLINIC_TOKEN` | `clinic-local-token` | Bearer token for reading and acknowledging handoffs |
+| `CLINICLINK_ADMIN_TOKEN` | *(value of `CLINIC_TOKEN`)* | Bearer token for HTTP handoff submission |
 | `CLINICLINK_DB_PATH` | `cliniclink.db` | SQLite path for handoffs |
 | `CLINICLINK_QUEUE_DB_PATH` | `cliniclink_queue.db` | SQLite path for sync queue |
 | `EVIDENCE_LOG_DIR` | `evidence` | Directory for append-only evidence logs |

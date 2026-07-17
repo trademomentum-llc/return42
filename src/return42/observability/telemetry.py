@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from enum import Enum
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -29,14 +29,21 @@ class TelemetryBus:
     """In-memory pub/sub bus for telemetry events."""
 
     def __init__(self) -> None:
-        self._subscriptions: dict[str, list[Callable[[TelemetryEvent], Coroutine[Any, Any, None] | None]]] = defaultdict(list)
+        # Accepts both synchronous callbacks and coroutines. Coroutine results are
+        # currently fire-and-forget; callers requiring awaited delivery should use
+        # an async subscriber wrapper in the future.
+        self._subscriptions: dict[str, list[Callable[[TelemetryEvent], Any]]] = defaultdict(list)
         self._history: list[TelemetryEvent] = []
 
     def subscribe(
         self,
         name: str,
-        callback: Callable[[TelemetryEvent], Coroutine[Any, Any, None] | None],
+        callback: Callable[[TelemetryEvent], Any],
     ) -> None:
+        """Subscribe to telemetry events.
+
+        `callback` may be a synchronous callable or an async coroutine function.
+        """
         self._subscriptions[name].append(callback)
 
     def publish(self, event: TelemetryEvent) -> None:

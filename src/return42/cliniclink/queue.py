@@ -27,7 +27,8 @@ class SyncQueue:
                     direction TEXT NOT NULL,
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    done INTEGER NOT NULL DEFAULT 0
+                    done INTEGER NOT NULL DEFAULT 0,
+                    handoff_id TEXT
                 )
                 """
             )
@@ -37,12 +38,33 @@ class SyncQueue:
                 ON sync_queue (direction, done, created_at)
                 """
             )
+            # Migrate older tables that did not store handoff_id.
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(sync_queue)").fetchall()
+            }
+            if "handoff_id" not in columns:
+                conn.execute("ALTER TABLE sync_queue ADD COLUMN handoff_id TEXT")
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_handoff_direction
+                ON sync_queue (handoff_id, direction)
+                """
+            )
 
     def enqueue(self, handoff: PatientHandoff, direction: str) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO sync_queue (direction, payload, created_at, done) VALUES (?, ?, ?, 0)",
-                (direction, json.dumps(handoff.to_payload()), datetime.now(timezone.utc).isoformat()),
+                """
+                INSERT OR IGNORE INTO sync_queue
+                    (handoff_id, direction, payload, created_at, done)
+                VALUES (?, ?, ?, ?, 0)
+                """,
+                (
+                    handoff.handoff_id,
+                    direction,
+                    json.dumps(handoff.to_payload()),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
 
     def dequeue(self, direction: str) -> list[dict]:

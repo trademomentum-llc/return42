@@ -17,6 +17,7 @@ services:
       - CLINICLINK_DB_PATH=/app/data/cliniclink.db
       - CLINICLINK_QUEUE_DB_PATH=/app/data/cliniclink_queue.db
       - CLINIC_TOKEN=${CLINIC_TOKEN:-clinic-local-token}
+      - CLINICLINK_ADMIN_TOKEN=${CLINICLINK_ADMIN_TOKEN:-${CLINIC_TOKEN:-clinic-local-token}}
       - TRUSTED_PEERS=${TRUSTED_PEERS:-}
       - TRUST_ON_FIRST_USE=${TRUST_ON_FIRST_USE:-0}
     volumes:
