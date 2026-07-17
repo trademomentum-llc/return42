@@ -1,0 +1,1 @@
+"""ClinicLink Desktop sidecar."""
