@@ -6,9 +6,10 @@ interface Props {
 }
 
 export default function ClinicList({ selected, onSelect }: Props) {
-  const { data: clinics, isLoading } = useClinics();
+  const { data: clinics, isLoading, error } = useClinics();
 
   if (isLoading) return <p>Discovering clinics...</p>;
+  if (error) return <p className="text-red-600">Failed to load clinics: {error.message}</p>;
   if (!clinics?.length) return <p className="text-amber-600">No clinics discovered on mesh.</p>;
 
   return (
