@@ -14,6 +14,7 @@ def create_sidecar_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         clinic_service = ClinicService(db_path=app.state.sidecar_db, queue_db_path=app.state.sidecar_queue_db)
         app.include_router(clinic_service.get_router(), prefix="/clinic")
+        STATE.service = clinic_service
         yield
 
     app = FastAPI(title="ClinicLink Desktop Sidecar", version="1.0.0", lifespan=lifespan)
