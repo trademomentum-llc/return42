@@ -1,7 +1,18 @@
+mod secrets;
 mod sidecar;
 
 use sidecar::{kill_sidecar, spawn_sidecar, SidecarState};
 use tauri::{Emitter, Manager, State};
+
+#[tauri::command]
+async fn store_secret(key: String, value: String) -> Result<(), String> {
+    secrets::store_secret(&key, &value).await
+}
+
+#[tauri::command]
+async fn read_secret(key: String) -> Result<Option<String>, String> {
+    secrets::read_secret(&key).await
+}
 
 #[tauri::command]
 async fn get_sidecar_port(state: State<'_, SidecarState>) -> Result<u16, String> {
@@ -74,7 +85,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(SidecarState::new())
         .setup(|app| {
-            spawn_sidecar(app.handle())?;
+            tokio::runtime::Handle::current()
+                .block_on(spawn_sidecar(app.handle()))?;
             let handle = app.handle().clone();
             let port: u16 = *handle
                 .state::<SidecarState>()
@@ -102,7 +114,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_sidecar_port,
             sidecar_request,
-            set_mode
+            set_mode,
+            store_secret,
+            read_secret
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

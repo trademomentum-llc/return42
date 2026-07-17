@@ -1,3 +1,4 @@
+use crate::secrets;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -16,20 +17,32 @@ impl SidecarState {
     }
 }
 
-pub fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
+pub async fn spawn_sidecar(app: &AppHandle) -> Result<u16, String> {
     let sidecar_path = app
         .path()
         .resolve("r42-cliniclink", tauri::path::BaseDirectory::Resource)
         .map_err(|e| e.to_string())?;
 
-    let child = Command::new(sidecar_path)
-        .arg("sidecar")
+    let mut cmd = Command::new(sidecar_path);
+    cmd.arg("sidecar")
         .arg("--port")
         .arg("2842")
         .arg("--host")
         .arg("127.0.0.1")
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    if let Ok(Some(key)) = secrets::read_secret("NODE_SIGNING_KEY").await {
+        cmd.env("NODE_SIGNING_KEY", key);
+    }
+    if let Ok(Some(token)) = secrets::read_secret("CLINIC_TOKEN").await {
+        cmd.env("CLINIC_TOKEN", token);
+    }
+    if let Ok(Some(token)) = secrets::read_secret("CLINICLINK_ADMIN_TOKEN").await {
+        cmd.env("CLINICLINK_ADMIN_TOKEN", token);
+    }
+
+    let child = cmd
         .spawn()
         .map_err(|e| format!("failed to spawn sidecar: {}", e))?;
 
