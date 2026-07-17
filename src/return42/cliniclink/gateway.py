@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import os
+
 from return42.mesh.controller import MessageTopic, SmeshController
 from return42.mesh.identity import NodeIdentity
 from return42.mesh.transport import MeshTransport
@@ -24,15 +27,21 @@ class ClinicGatewayController:
         store: HandoffStore | None = None,
         queue: SyncQueue | None = None,
         telemetry_bus: TelemetryBus | None = None,
+        heartbeat_interval: float | None = None,
     ) -> None:
         self._identity = identity
         self._store = store or HandoffStore(db_path)
         self._queue = queue or SyncQueue(queue_db_path)
         self._telemetry = telemetry_bus or TelemetryBus()
+        self._heartbeat_interval = (
+            heartbeat_interval
+            if heartbeat_interval is not None
+            else float(os.getenv("CLINICLINK_HEARTBEAT_INTERVAL", "5.0"))
+        )
         self._controller = SmeshController(
             identity,
             transport,
-            heartbeat_interval=0.05,
+            heartbeat_interval=self._heartbeat_interval,
             trust_store=trust_store or TrustStore(tofu=True),
             telemetry_bus=self._telemetry,
         )
@@ -98,8 +107,8 @@ class ClinicGatewayController:
             )
             return
         try:
-            self._store.create(handoff)
-            self._queue.enqueue(handoff, "inbound")
+            await asyncio.to_thread(self._store.create, handoff)
+            await asyncio.to_thread(self._queue.enqueue, handoff, "inbound")
         except Exception as exc:
             self._emit(
                 "cliniclink.handoff.rejected",
