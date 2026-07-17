@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { sidecarRequest } from '../api/sidecar';
 
 // TODO(Task 15): move to secure storage
-const ADMIN_TOKEN = import.meta.env.VITE_CLINICLINK_ADMIN_TOKEN || 'admin-token';
+const ADMIN_TOKEN = ((): string => {
+  const token = import.meta.env.VITE_CLINICLINK_ADMIN_TOKEN;
+  if (token) return token;
+  if (import.meta.env.DEV) return 'admin-token';
+  throw new Error('VITE_CLINICLINK_ADMIN_TOKEN is required in production.');
+})();
 
 interface Props {
   clinicId: string;
@@ -24,7 +29,7 @@ export default function HandoffForm({ clinicId, onSent }: Props) {
 
     let etaMinutes: number | null = null;
     if (eta.trim() !== '') {
-      const parsed = parseInt(eta, 10);
+      const parsed = Number(eta);
       if (!(Number.isInteger(parsed) && parsed >= 0)) {
         setEtaError('ETA must be a non-negative whole number.');
         return;
