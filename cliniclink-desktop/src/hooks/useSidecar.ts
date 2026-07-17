@@ -1,9 +1,15 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { getMode, setMode, sidecarRequest } from '../api/sidecar';
 
 export type SidecarHook = {
   loading: boolean;
   error: string | null;
+  requestText: (
+    method: string,
+    path: string,
+    body?: object,
+    headers?: Record<string, string>,
+  ) => Promise<string | null>;
   request: <T>(method: string, path: string, body?: object, headers?: Record<string, string>) => Promise<T | null>;
   get: <T>(path: string, headers?: Record<string, string>) => Promise<T | null>;
   post: <T>(path: string, body?: object, headers?: Record<string, string>) => Promise<T | null>;
@@ -14,21 +20,32 @@ export type SidecarHook = {
   clearError: () => void;
 };
 
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return false;
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  if (first === '{' && last === '}') return true;
+  if (first === '[' && last === ']') return true;
+  if (first === '"') return true;
+  if (/^(true|false|null|-?\d+(\.\d+)?([eE][+-]?\d+)?)$/.test(trimmed)) return true;
+  return false;
+}
+
 export function useSidecar(): SidecarHook {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const request = useCallback(async <T,>(
+  const requestText = useCallback(async (
     method: string,
     path: string,
     body?: object,
     headers?: Record<string, string>,
-  ): Promise<T | null> => {
+  ): Promise<string | null> => {
     setLoading(true);
     setError(null);
     try {
-      const text = await sidecarRequest(method, path, body, headers);
-      return JSON.parse(text) as T;
+      return await sidecarRequest(method, path, body, headers);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -37,6 +54,22 @@ export function useSidecar(): SidecarHook {
       setLoading(false);
     }
   }, []);
+
+  const request = useCallback(async <T,>(
+    method: string,
+    path: string,
+    body?: object,
+    headers?: Record<string, string>,
+  ): Promise<T | null> => {
+    const text = await requestText(method, path, body, headers);
+    if (text === null || text === '') return null;
+    if (!looksLikeJson(text)) return null;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    }
+  }, [requestText]);
 
   const get = useCallback(
     <T,>(path: string, headers?: Record<string, string>): Promise<T | null> =>
@@ -94,16 +127,20 @@ export function useSidecar(): SidecarHook {
     setError(null);
   }, []);
 
-  return {
-    loading,
-    error,
-    request,
-    get,
-    post,
-    put,
-    del,
-    setMode: setModeCallback,
-    getMode: getModeCallback,
-    clearError,
-  };
+  return useMemo(
+    () => ({
+      loading,
+      error,
+      requestText,
+      request,
+      get,
+      post,
+      put,
+      del,
+      setMode: setModeCallback,
+      getMode: getModeCallback,
+      clearError,
+    }),
+    [loading, error, requestText, request, get, post, put, del, setModeCallback, getModeCallback, clearError],
+  );
 }
