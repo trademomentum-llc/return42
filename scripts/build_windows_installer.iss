@@ -29,10 +29,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "..\build\installer\bin\r42-cliniclink.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\installer\bin\r42-observe.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\cliniclink-desktop\src-tauri\target\release\cliniclink-desktop.exe"; DestDir: "{app}"; DestName: "ClinicLink Desktop.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Return42 ClinicLink"; Filename: "{app}\r42-cliniclink.exe"; Parameters: "--help"
 Name: "{autoprograms}\Return42 Observability"; Filename: "{app}\r42-observe.exe"; Parameters: "--help"
+Name: "{autoprograms}\ClinicLink Desktop"; Filename: "{app}\ClinicLink Desktop.exe"
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath('{app}')

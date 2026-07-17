@@ -24,6 +24,15 @@ BUILD_DIR = ROOT / "build"
 LINUX_BUILD_DIR = BUILD_DIR / "linux"
 DIST_DIR = LINUX_BUILD_DIR / "dist"
 VERSION_FILE = ROOT / "src" / "return42" / "cliniclink" / "__init__.py"
+TAURI_BINARY = (
+    ROOT
+    / "cliniclink-desktop"
+    / "src-tauri"
+    / "target"
+    / "release"
+    / "cliniclink-desktop"
+)
+DESKTOP_FILE_ID = "com.trademomentum.cliniclink-desktop.desktop"
 
 
 def get_version() -> str:
@@ -73,12 +82,27 @@ def build_tarball(version: str) -> Path:
     tarball = BUILD_DIR / f"Return42-ClinicLink-{version}-linux-x86_64.tar.gz"
     pkg_dir = LINUX_BUILD_DIR / "Return42-ClinicLink"
     bin_dir = pkg_dir / "bin"
+    applications_dir = pkg_dir / "share" / "applications"
     if pkg_dir.exists():
         shutil.rmtree(pkg_dir)
     bin_dir.mkdir(parents=True)
     for binary in ("r42-cliniclink", "r42-observe"):
         shutil.copy(DIST_DIR / binary, bin_dir / binary)
         (bin_dir / binary).chmod(0o755)
+
+    if TAURI_BINARY.exists():
+        shutil.copy(TAURI_BINARY, bin_dir / "cliniclink-desktop")
+        (bin_dir / "cliniclink-desktop").chmod(0o755)
+        applications_dir.mkdir(parents=True)
+        (applications_dir / DESKTOP_FILE_ID).write_text(
+            _desktop_file_contents("/usr/local/bin")
+        )
+    else:
+        print(
+            f"WARNING: Tauri desktop binary not found at {TAURI_BINARY}; "
+            "skipping desktop app in tarball."
+        )
+
     run(
         [
             "tar",
@@ -90,6 +114,18 @@ def build_tarball(version: str) -> Path:
         ]
     )
     return tarball
+
+
+def _desktop_file_contents(bindir: str) -> str:
+    return (
+        "[Desktop Entry]\n"
+        "Name=ClinicLink Desktop\n"
+        "Comment=Return42 ClinicLink ambulance-to-clinic handoff\n"
+        f"Exec={bindir}/cliniclink-desktop\n"
+        "Type=Application\n"
+        "Terminal=false\n"
+        "Categories=Utility;MedicalSoftware;\n"
+    )
 
 
 def build_deb(version: str) -> Path:
@@ -107,6 +143,20 @@ def build_deb(version: str) -> Path:
         shutil.copy(DIST_DIR / binary, bin_dir / binary)
         (bin_dir / binary).chmod(0o755)
 
+    if not TAURI_BINARY.exists():
+        raise RuntimeError(
+            f"Tauri desktop binary not found at {TAURI_BINARY}. "
+            "Run 'cd cliniclink-desktop && cargo tauri build' first."
+        )
+    shutil.copy(TAURI_BINARY, bin_dir / "cliniclink-desktop")
+    (bin_dir / "cliniclink-desktop").chmod(0o755)
+
+    applications_dir = pkg_root / "usr" / "share" / "applications"
+    applications_dir.mkdir(parents=True)
+    (applications_dir / DESKTOP_FILE_ID).write_text(
+        _desktop_file_contents("/usr/local/bin")
+    )
+
     (control_dir / "control").write_text(
         f"Package: return42-cliniclink\n"
         f"Version: {version}\n"
@@ -115,8 +165,8 @@ def build_deb(version: str) -> Path:
         f"Architecture: amd64\n"
         f"Maintainer: TradeMomentum LLC <support@trademomentum.io>\n"
         f"Description: Return42 ClinicLink ambulance-to-clinic handoff\n"
-        f" Command-line tools for the Return42 resilient edge mesh,\n"
-        f" including ClinicLink and observability utilities.\n"
+        f" Command-line tools and ClinicLink Desktop GUI for the\n"
+        f" Return42 resilient edge mesh.\n"
     )
 
     deb_path = BUILD_DIR / f"Return42-ClinicLink-{version}-linux-x86_64.deb"

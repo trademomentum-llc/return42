@@ -28,6 +28,16 @@ INSTALLER_DIR = BUILD_DIR / "installer"
 PAYLOAD_DIR = INSTALLER_DIR / "payload"
 BIN_DIR = INSTALLER_DIR / "bin"
 DIST_FILE = ROOT / "src" / "return42" / "cliniclink" / "__init__.py"
+TAURI_APP = (
+    ROOT
+    / "cliniclink-desktop"
+    / "src-tauri"
+    / "target"
+    / "release"
+    / "bundle"
+    / "macos"
+    / "ClinicLink Desktop.app"
+)
 
 
 def get_version() -> str:
@@ -82,6 +92,15 @@ def stage_payload() -> None:
         shutil.copy(BIN_DIR / script, target_bin / script)
         (target_bin / script).chmod(0o755)
 
+    if not TAURI_APP.exists():
+        raise RuntimeError(
+            f"Tauri desktop app not found at {TAURI_APP}. "
+            "Run 'cd cliniclink-desktop && npm run tauri-build' first."
+        )
+    target_app = PAYLOAD_DIR / "Applications" / "ClinicLink Desktop.app"
+    target_app.parent.mkdir(parents=True)
+    shutil.copytree(TAURI_APP, target_app, symlinks=True)
+
 
 def write_installer_resources(version: str) -> None:
     INSTALLER_DIR.mkdir(parents=True, exist_ok=True)
@@ -90,7 +109,8 @@ def write_installer_resources(version: str) -> None:
         "This installer will install the Return42 command-line tools:\n"
         "  - r42-cliniclink\n"
         "  - r42-observe\n\n"
-        "These tools will be placed in /usr/local/bin.\n"
+        "It will also install ClinicLink Desktop in /Applications.\n\n"
+        "The command-line tools will be placed in /usr/local/bin.\n"
     )
     (INSTALLER_DIR / "license.txt").write_text(
         "Return42 ClinicLink\n"
@@ -99,6 +119,7 @@ def write_installer_resources(version: str) -> None:
     )
     (INSTALLER_DIR / "conclusion.txt").write_text(
         "Return42 ClinicLink has been installed successfully.\n\n"
+        "ClinicLink Desktop has been installed in /Applications.\n\n"
         "The following commands are now available in /usr/local/bin:\n"
         "  - r42-cliniclink\n"
         "  - r42-observe\n\n"
