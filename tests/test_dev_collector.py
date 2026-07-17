@@ -134,3 +134,37 @@ def test_collect_test_metrics_no_metrics_when_pytest_missing(tmp_path, monkeypat
 
     assert registry.get_sample_values("dev_test_runs_total") == {}
     assert registry.get_sample_values("dev_test_failures_total") == {}
+
+
+def test_collect_test_metrics_reads_relative_coverage_xml(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    coverage_file = tmp_path / "coverage.xml"
+    coverage_file.write_text('<coverage line-rate="0.25"></coverage>')
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics("coverage.xml")
+
+    assert registry.get_sample_values("dev_coverage_percent")[("dev_coverage_percent", ())] == 25.0
+
+
+def test_collect_test_metrics_rejects_path_traversal_coverage_xml(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    outside_file = tmp_path.parent / "outside-coverage.xml"
+    outside_file.write_text('<coverage line-rate="0.75"></coverage>')
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics("../outside-coverage.xml")
+
+    assert registry.get_sample_values("dev_coverage_percent") == {}
