@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { sidecarRequest } from '../api/sidecar';
+import { readSecret, sidecarRequest } from '../api/sidecar';
 
 export interface Handoff {
   handoff_id: string;
@@ -15,20 +15,31 @@ export interface Handoff {
   acknowledged_at: string | null;
 }
 
-const CLINIC_TOKEN = 'clinic-token'; // load from secure storage in later task
+function useClinicToken() {
+  return useQuery<string | null>({
+    queryKey: ['secrets', 'CLINIC_TOKEN'],
+    queryFn: () => readSecret('CLINIC_TOKEN'),
+    staleTime: Infinity,
+  });
+}
 
 export function useHandoffs() {
+  const { data: token, isLoading: tokenLoading } = useClinicToken();
   return useQuery<Handoff[]>({
-    queryKey: ['handoffs'],
+    queryKey: ['handoffs', token],
     queryFn: async () => {
+      if (!token) {
+        throw new Error('CLINIC_TOKEN is not configured in secure storage.');
+      }
       const text = await sidecarRequest(
         'GET',
         `/clinic/handoffs?status=pending`,
         undefined,
-        { Authorization: `Bearer ${CLINIC_TOKEN}` },
+        { Authorization: `Bearer ${token}` },
       );
       return JSON.parse(text);
     },
+    enabled: !tokenLoading,
   });
 }
 
@@ -36,11 +47,15 @@ export function useAcknowledgeHandoff() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (handoffId: string) => {
+      const token = await readSecret('CLINIC_TOKEN');
+      if (!token) {
+        throw new Error('CLINIC_TOKEN is not configured in secure storage.');
+      }
       const text = await sidecarRequest(
         'POST',
         `/clinic/handoffs/${handoffId}/ack`,
         undefined,
-        { Authorization: `Bearer ${CLINIC_TOKEN}` },
+        { Authorization: `Bearer ${token}` },
       );
       return JSON.parse(text);
     },

@@ -1,13 +1,5 @@
 import { useState } from 'react';
-import { sidecarRequest } from '../api/sidecar';
-
-// TODO(Task 15): move to secure storage
-const ADMIN_TOKEN = ((): string => {
-  const token = import.meta.env.VITE_CLINICLINK_ADMIN_TOKEN;
-  if (token) return token;
-  if (import.meta.env.DEV) return 'admin-token';
-  throw new Error('VITE_CLINICLINK_ADMIN_TOKEN is required in production.');
-})();
+import { readSecret, sidecarRequest } from '../api/sidecar';
 
 interface Props {
   clinicId: string;
@@ -21,11 +13,22 @@ export default function HandoffForm({ clinicId, onSent }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [etaError, setEtaError] = useState<string | null>(null);
+  const [adminToken, setAdminToken] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
     setEtaError(null);
+
+    let token = adminToken;
+    if (!token) {
+      token = await readSecret('CLINICLINK_ADMIN_TOKEN');
+      if (!token) {
+        setSubmitError('Admin token is not configured. Store it in secure settings first.');
+        return;
+      }
+      setAdminToken(token);
+    }
 
     let etaMinutes: number | null = null;
     if (eta.trim() !== '') {
@@ -53,7 +56,7 @@ export default function HandoffForm({ clinicId, onSent }: Props) {
         'POST',
         '/ambulance/handoffs',
         payload,
-        { Authorization: `Bearer ${ADMIN_TOKEN}` },
+        { Authorization: `Bearer ${token}` },
       );
       onSent();
       setPatientId('');
