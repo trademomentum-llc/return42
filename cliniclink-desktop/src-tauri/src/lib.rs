@@ -1,7 +1,7 @@
 mod sidecar;
 
 use sidecar::{kill_sidecar, spawn_sidecar, SidecarState};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 #[tauri::command]
 async fn get_sidecar_port(state: State<'_, SidecarState>) -> Result<u16, String> {
@@ -21,12 +21,77 @@ async fn get_sidecar_port(state: State<'_, SidecarState>) -> Result<u16, String>
     Ok(*port_guard)
 }
 
+#[tauri::command]
+async fn sidecar_request(
+    state: State<'_, SidecarState>,
+    method: String,
+    path: String,
+    body: Option<String>,
+    headers: Option<String>,
+) -> Result<String, String> {
+    let port = *state
+        .port
+        .lock()
+        .map_err(|e| format!("sidecar port lock poisoned: {}", e))?;
+    let url = format!("http://127.0.0.1:{}{}", port, path);
+    let client = reqwest::Client::new();
+    let mut req = match method.to_uppercase().as_str() {
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        _ => return Err("unsupported method".to_string()),
+    };
+    if let Some(h) = headers {
+        let parsed: std::collections::HashMap<String, String> =
+            serde_json::from_str(&h).map_err(|e| e.to_string())?;
+        for (k, v) in parsed {
+            req = req.header(k, v);
+        }
+    }
+    if let Some(b) = body {
+        req = req.body(b).header("Content-Type", "application/json");
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}
+
+#[tauri::command]
+async fn set_mode(state: State<'_, SidecarState>, mode: String) -> Result<String, String> {
+    sidecar_request(
+        state,
+        "POST".to_string(),
+        "/mode".to_string(),
+        Some(format!("{{\"mode\":\"{}\"}}", mode)),
+        None,
+    )
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(SidecarState::new())
         .setup(|app| {
             spawn_sidecar(app.handle())?;
+            let handle = app.handle().clone();
+            let port: u16 = *handle
+                .state::<SidecarState>()
+                .port
+                .lock()
+                .map_err(|e| format!("sidecar port lock poisoned: {}", e))?;
+            tauri::async_runtime::spawn(async move {
+                use futures_util::StreamExt;
+                use tokio_tungstenite::tungstenite::Message;
+
+                let url = format!("ws://127.0.0.1:{}/events", port);
+                if let Ok((mut ws, _)) = tokio_tungstenite::connect_async(&url).await {
+                    while let Some(Ok(Message::Text(text))) = ws.next().await {
+                        let _ = handle.emit("cliniclink:event", text);
+                    }
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -34,7 +99,11 @@ pub fn run() {
                 let _ = kill_sidecar(window.app_handle());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_sidecar_port])
+        .invoke_handler(tauri::generate_handler![
+            get_sidecar_port,
+            sidecar_request,
+            set_mode
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
