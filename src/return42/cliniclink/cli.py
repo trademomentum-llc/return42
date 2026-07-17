@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 
 import typer
 import uvicorn
@@ -11,6 +12,8 @@ from return42.mesh.identity import NodeIdentity
 from return42.mesh.transport_mqtt import MqttTransport
 from return42.mesh.transport import InMemoryTransport
 from return42.mesh.trust import TrustStore
+from return42.observability.evidence import EvidenceLogger
+from return42.observability.telemetry import TelemetryBus
 
 from .api import create_app
 from .gateway import ClinicGatewayController
@@ -46,6 +49,8 @@ def gateway(
         trust_store = TrustStore.from_env()
         store = HandoffStore(db_path)
         queue = SyncQueue(queue_db_path)
+        telemetry_bus = TelemetryBus()
+        evidence = EvidenceLogger()
 
         controller = ClinicGatewayController(
             identity=identity,
@@ -55,7 +60,21 @@ def gateway(
             trust_store=trust_store,
             store=store,
             queue=queue,
+            telemetry_bus=telemetry_bus,
         )
+
+        for event_name in (
+            "mesh.message.sent",
+            "mesh.message.received",
+            "mesh.message.signature_invalid",
+            "mesh.peer.trusted",
+            "mesh.peer.untrusted",
+            "mesh.command.rejected",
+            "cliniclink.handoff.received",
+            "cliniclink.handoff.rejected",
+            "cliniclink.handoff.acknowledged",
+        ):
+            telemetry_bus.subscribe(event_name, evidence.write)
 
         app = create_app(
             db_path=db_path,
@@ -63,6 +82,7 @@ def gateway(
             trust_store=trust_store,
             store=store,
             queue=queue,
+            telemetry_bus=telemetry_bus,
         )
         config = uvicorn.Config(
             app,
@@ -87,8 +107,13 @@ def gateway(
             typer.echo("Shutdown signal received, stopping gateway...")
             stop_event.set()
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, on_signal)
+        # Unix only: asyncio signal handlers are not supported on Windows.
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                try:
+                    loop.add_signal_handler(sig, on_signal)
+                except (NotImplementedError, ValueError):
+                    pass
 
         try:
             await stop_event.wait()
@@ -96,7 +121,11 @@ def gateway(
             server.should_exit = True
             await server_task
             await controller.stop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.remove_signal_handler(sig)
+            if sys.platform != "win32":
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    try:
+                        loop.remove_signal_handler(sig)
+                    except (NotImplementedError, ValueError):
+                        pass
 
     asyncio.run(run())
