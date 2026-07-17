@@ -186,6 +186,45 @@ export CLINICLINK_ADMIN_TOKEN="$(python -c 'import secrets; print(secrets.token_
 - Use HTTPS or a local mesh link for production deployments; the default HTTP server is intended for local networks.
 - Example patient identifiers in documentation and tests use synthetic values such as `P-12345`.
 
+## Clinic gateway identity persistence
+
+The clinic gateway must keep a stable Ed25519 signing key so that enrolled ambulances can verify its identity after restarts. Without persistence, the gateway generates an ephemeral key on every boot and ambulances will reject its signatures.
+
+### Generate a persistent clinic key
+
+Run this once and record the verify key you will distribute to ambulances:
+
+```bash
+export NODE_SIGNING_KEY="$(python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+import os
+identity = NodeIdentity.from_env(persist_ephemeral=True)
+print(os.environ["NODE_SIGNING_KEY"])
+PY
+)"
+export NODE_ID=clinic-a
+python - <<'PY'
+from return42.mesh.identity import NodeIdentity
+print(NodeIdentity.from_env().verify_key_b64)
+PY
+```
+
+### Persist the key in Docker Compose
+
+Option 1 — pass the key through your environment or a `.env` file:
+
+```bash
+# .env
+NODE_SIGNING_KEY=<clinic-gateway-private-key>
+```
+
+Option 2 — mount the key as a Docker secret (recommended for production). Create `secrets/clinic_signing_key.txt` containing only the key, then uncomment the `secrets` lines in `docker-compose.cliniclink.yml` and load the secret into `NODE_SIGNING_KEY` before the gateway starts, for example with a small wrapper script or by sourcing the file in your shell:
+
+```bash
+export NODE_SIGNING_KEY="$(cat secrets/clinic_signing_key.txt)"
+docker compose -f docker-compose.cliniclink.yml up --build
+```
+
 ## Docker Compose
 
 Start the ClinicLink stack with an MQTT broker and the gateway:
@@ -218,6 +257,7 @@ docker compose -f docker-compose.cliniclink.yml up --build
 | `CLINICLINK_ADMIN_TOKEN` | *(value of `CLINIC_TOKEN`)* | Bearer token for HTTP handoff submission |
 | `CLINICLINK_DB_PATH` | `cliniclink.db` | SQLite path for handoffs |
 | `CLINICLINK_QUEUE_DB_PATH` | `cliniclink_queue.db` | SQLite path for sync queue |
+| `CLINICLINK_HEARTBEAT_INTERVAL` | `5.0` | Mesh heartbeat interval in seconds |
 | `EVIDENCE_LOG_DIR` | `evidence` | Directory for append-only evidence logs |
 
 ## Extending ClinicLink

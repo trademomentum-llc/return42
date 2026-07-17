@@ -13,6 +13,10 @@ services:
       - "8000:8000"
     environment:
       - NODE_ID=clinic-a
+      # Set NODE_SIGNING_KEY from your environment, or mount it as a Docker secret
+      # (see the ClinicLink runbook). A persistent key gives ambulances a stable
+      # clinic identity to trust across restarts.
+      - NODE_SIGNING_KEY=${NODE_SIGNING_KEY:-}
       - EVIDENCE_LOG_DIR=/app/evidence
       - CLINICLINK_DB_PATH=/app/data/cliniclink.db
       - CLINICLINK_QUEUE_DB_PATH=/app/data/cliniclink_queue.db
@@ -20,9 +24,13 @@ services:
       - CLINICLINK_ADMIN_TOKEN=${CLINICLINK_ADMIN_TOKEN:-${CLINIC_TOKEN:-clinic-local-token}}
       - TRUSTED_PEERS=${TRUSTED_PEERS:-}
       - TRUST_ON_FIRST_USE=${TRUST_ON_FIRST_USE:-0}
+      - CLINICLINK_HEARTBEAT_INTERVAL=${CLINICLINK_HEARTBEAT_INTERVAL:-5.0}
     volumes:
       - ./evidence:/app/evidence
       - cliniclink-data:/app/data
+    # Example Docker secret mount for the clinic signing key:
+    # secrets:
+    #   - clinic_signing_key
 
   mqtt:
     image: eclipse-mosquitto:2
@@ -33,3 +41,9 @@ services:
 
 volumes:
   cliniclink-data:
+
+# Example secret definition for NODE_SIGNING_KEY. Create the file outside of
+# version control and reference it with `docker compose --env-file .env up`.
+# secrets:
+#   clinic_signing_key:
+#     file: ./secrets/clinic_signing_key.txt
