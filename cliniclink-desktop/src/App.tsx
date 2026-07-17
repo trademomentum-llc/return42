@@ -4,12 +4,17 @@ import { useAppStore } from './store/appStore';
 import { getMode } from './api/sidecar';
 
 export default function App() {
-  const { mode, setMode } = useAppStore();
+  const mode = useAppStore((s) => s.mode);
+  const setMode = useAppStore((s) => s.setMode);
 
   useEffect(() => {
-    getMode().then((m) => {
-      if (m.mode === 'clinic' || m.mode === 'ambulance') setMode(m.mode);
-    });
+    getMode()
+      .then((m) => {
+        if (m.mode === 'clinic' || m.mode === 'ambulance') setMode(m.mode);
+      })
+      .catch((error) => {
+        console.error('Failed to load current mode:', error);
+      });
   }, [setMode]);
 
   if (!mode) return <ModeSelector />;
