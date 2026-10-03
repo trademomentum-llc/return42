@@ -76,22 +76,42 @@ class DevelopmentCollector:
             self._collect_coverage(coverage_xml)
 
     def _collect_coverage(self, coverage_xml: str | Path) -> None:
-        repo_root = os.path.realpath(self._repo_path)
-        xml_path_str = os.path.realpath(os.path.normpath(os.path.join(repo_root, str(coverage_xml))))
-        if not (xml_path_str == repo_root or xml_path_str.startswith(f"{repo_root}{os.sep}")):
+        """Read only the fixed file ``coverage.xml`` in the repo root.
+
+        The caller string is never a filesystem path. Absolute paths and any
+        directory component are rejected. The basename must equal the literal
+        ``coverage.xml``; that comparison is not a sanitizer, so it does not
+        make the caller string safe to open. ``os.path.isfile`` and
+        ``defusedxml`` receive ``os.path.join(repo_root, "coverage.xml")``
+        only — the string literal, not the basename, the caller path, or a
+        canonicalized caller path. A symlink at that constant path is rejected
+        so the fixed name cannot redirect outside the root. Parsing uses
+        defusedxml so entity expansion is refused.
+        """
+        raw = os.fspath(coverage_xml)
+        if os.path.isabs(raw):
+            return
+        if os.sep in raw or (os.altsep is not None and os.altsep in raw):
+            return
+        # Equality does not sanitize ``raw``. Sinks below use the literal.
+        if os.path.basename(raw) != "coverage.xml":
             return
 
-        xml_path = Path(xml_path_str)
-        if not xml_path.exists():
+        repo_root = os.path.realpath(os.fspath(self._repo_path))
+        fixed = os.path.join(repo_root, "coverage.xml")
+        if os.path.islink(fixed):
             return
-        try:
-            import xml.etree.ElementTree as ET
-            tree = ET.parse(xml_path)
-            root = tree.getroot()
-            rate = root.attrib.get("line-rate", "0")
-            self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(float(rate) * 100)
-        except Exception:
-            pass
+        if os.path.isfile(fixed):
+            try:
+                import defusedxml.ElementTree as DefusedET
+
+                root = DefusedET.parse(fixed).getroot()
+                rate = root.attrib.get("line-rate", "0")
+                self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(
+                    float(rate) * 100
+                )
+            except Exception:
+                return
 
     def emit_all(self, coverage_xml: str | Path | None = None) -> None:
         self.collect_git_metrics()
