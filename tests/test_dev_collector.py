@@ -192,3 +192,50 @@ def test_collect_test_metrics_rejects_xml_bomb(tmp_path, monkeypatch):
     collector.collect_test_metrics("coverage.xml")
 
     assert registry.get_sample_values("dev_coverage_percent") == {}
+
+
+
+def test_collect_coverage_rejects_sibling_symlink_and_absolute(tmp_path, monkeypatch):
+    """Sibling-prefix, symlink escape, and absolute paths must not be opened."""
+    import builtins
+    import os
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    sibling = Path(str(tmp_path) + "-sibling")
+    sibling.mkdir()
+    outside = sibling / "coverage.xml"
+    outside.write_text('<coverage line-rate="0.91"></coverage>')
+    # A bare startswith(repo_root) matches this sibling directory. The guard
+    # must require the separator so the sibling is not treated as inside.
+    assert str(outside).startswith(str(tmp_path))
+    assert not str(outside).startswith(str(tmp_path) + os.sep)
+
+    opened = []
+    real_open = builtins.open
+
+    def tracking_open(file, *args, **kwargs):
+        opened.append(os.fspath(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", tracking_open)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+
+    collector.collect_test_metrics(str(outside))
+    collector.collect_test_metrics("../" + sibling.name + "/coverage.xml")
+    link = tmp_path / "coverage.xml"
+    link.symlink_to(outside)
+    collector.collect_test_metrics("coverage.xml")
+    (tmp_path / "not-a-file").mkdir()
+    collector.collect_test_metrics("not-a-file")
+
+    assert registry.get_sample_values("dev_coverage_percent") == {}
+    outside_real = os.path.realpath(outside)
+    assert all(os.path.realpath(p) != outside_real for p in opened)
