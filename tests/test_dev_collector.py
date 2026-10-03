@@ -168,3 +168,27 @@ def test_collect_test_metrics_rejects_path_traversal_coverage_xml(tmp_path, monk
     collector.collect_test_metrics("../outside-coverage.xml")
 
     assert registry.get_sample_values("dev_coverage_percent") == {}
+
+
+def test_collect_test_metrics_rejects_xml_bomb(tmp_path, monkeypatch):
+    """Entity expansion must not be parsed into a coverage metric."""
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    bomb = """<?xml version="1.0"?>
+<!DOCTYPE coverage [
+  <!ENTITY a "aaaaaaaaaa">
+  <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+]>
+<coverage line-rate="&b;"></coverage>
+"""
+    (tmp_path / "coverage.xml").write_text(bomb)
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics("coverage.xml")
+
+    assert registry.get_sample_values("dev_coverage_percent") == {}

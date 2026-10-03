@@ -76,22 +76,33 @@ class DevelopmentCollector:
             self._collect_coverage(coverage_xml)
 
     def _collect_coverage(self, coverage_xml: str | Path) -> None:
-        repo_root = os.path.realpath(self._repo_path)
-        xml_path_str = os.path.realpath(os.path.normpath(os.path.join(repo_root, str(coverage_xml))))
-        if not (xml_path_str == repo_root or xml_path_str.startswith(f"{repo_root}{os.sep}")):
-            return
+        """Read coverage XML only from a regular file inside the repo root.
 
-        xml_path = Path(xml_path_str)
-        if not xml_path.exists():
-            return
-        try:
-            import xml.etree.ElementTree as ET
-            tree = ET.parse(xml_path)
-            root = tree.getroot()
-            rate = root.attrib.get("line-rate", "0")
-            self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(float(rate) * 100)
-        except Exception:
-            pass
+        The resolved path is used only after ``str.startswith`` confirms it is
+        under the real repo root (rejects ``..``, absolute escapes, and
+        symlinks that resolve outside). Parsing uses defusedxml so entity
+        expansion and external entities are refused.
+        """
+        repo_root = os.path.realpath(self._repo_path)
+        prefix = repo_root if repo_root.endswith(os.sep) else repo_root + os.sep
+        requested = os.fspath(coverage_xml)
+        if os.path.isabs(requested):
+            candidate = os.path.realpath(requested)
+        else:
+            candidate = os.path.realpath(os.path.join(repo_root, requested))
+
+        if candidate.startswith(prefix):
+            if os.path.isfile(candidate):
+                try:
+                    import defusedxml.ElementTree as DefusedET
+
+                    root = DefusedET.parse(candidate).getroot()
+                    rate = root.attrib.get("line-rate", "0")
+                    self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(
+                        float(rate) * 100
+                    )
+                except Exception:
+                    return
 
     def emit_all(self, coverage_xml: str | Path | None = None) -> None:
         self.collect_git_metrics()
