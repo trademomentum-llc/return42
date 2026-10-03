@@ -76,52 +76,42 @@ class DevelopmentCollector:
             self._collect_coverage(coverage_xml)
 
     def _collect_coverage(self, coverage_xml: str | Path) -> None:
-        """Read coverage XML only from a regular file strictly inside the repo.
+        """Read only the fixed file ``coverage.xml`` in the repo root.
 
-        The caller value is treated as a filename: absolute paths and any
-        directory component are rejected, and only ``os.path.basename`` is
-        joined onto the canonical repo root. ``realpath`` resolves symlinks.
-        The joined path is never passed to ``open`` / the XML parser. The
-        canonical path is parsed only when it is a regular file whose prefix
-        is the repo root plus a separator (so a sibling directory that merely
-        shares the root's string prefix cannot match) and ``normpath`` of the
-        joined name still equals that canonical path (a symlink rewrite does
-        not). Parsing uses defusedxml so entity expansion is refused.
+        The caller string is never a filesystem path. Absolute paths and any
+        directory component are rejected. The basename must equal the literal
+        ``coverage.xml``; that comparison is not a sanitizer, so it does not
+        make the caller string safe to open. ``os.path.isfile`` and
+        ``defusedxml`` receive ``os.path.join(repo_root, "coverage.xml")``
+        only — the string literal, not the basename, the caller path, or a
+        canonicalized caller path. A symlink at that constant path is rejected
+        so the fixed name cannot redirect outside the root. Parsing uses
+        defusedxml so entity expansion is refused.
         """
-        repo_root = os.path.realpath(os.fspath(self._repo_path))
-        root_prefix = repo_root if repo_root.endswith(os.sep) else repo_root + os.sep
-
         raw = os.fspath(coverage_xml)
         if os.path.isabs(raw):
             return
         if os.sep in raw or (os.altsep is not None and os.altsep in raw):
             return
-        name = os.path.basename(raw)
-        if name in ("", ".", "..") or name != raw:
+        # Equality does not sanitize ``raw``. Sinks below use the literal.
+        if os.path.basename(raw) != "coverage.xml":
             return
 
-        joined = os.path.join(repo_root, name)
-        canonical = os.path.realpath(joined)
-        # realpath follows symlinks; normpath does not. A difference means the
-        # leaf was rewritten (symlink escape, including a target that happens
-        # to land back inside the root).
-        if os.path.normpath(joined) != canonical:
+        repo_root = os.path.realpath(os.fspath(self._repo_path))
+        fixed = os.path.join(repo_root, "coverage.xml")
+        if os.path.islink(fixed):
             return
-        # Strict containment. Checked on the canonical path, with a separator,
-        # before any filesystem open. ``os.path.isfile`` and the parser run
-        # only in this branch, and they receive ``canonical``, not ``joined``.
-        if canonical.startswith(root_prefix):
-            if os.path.isfile(canonical) and canonical.startswith(root_prefix):
-                try:
-                    import defusedxml.ElementTree as DefusedET
+        if os.path.isfile(fixed):
+            try:
+                import defusedxml.ElementTree as DefusedET
 
-                    root = DefusedET.parse(canonical).getroot()
-                    rate = root.attrib.get("line-rate", "0")
-                    self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(
-                        float(rate) * 100
-                    )
-                except Exception:
-                    return
+                root = DefusedET.parse(fixed).getroot()
+                rate = root.attrib.get("line-rate", "0")
+                self._registry.gauge("dev_coverage_percent", "Code coverage percentage").set(
+                    float(rate) * 100
+                )
+            except Exception:
+                return
 
     def emit_all(self, coverage_xml: str | Path | None = None) -> None:
         self.collect_git_metrics()
