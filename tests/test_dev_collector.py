@@ -137,20 +137,37 @@ def test_collect_test_metrics_no_metrics_when_pytest_missing(tmp_path, monkeypat
 
 
 def test_collect_test_metrics_reads_relative_coverage_xml(tmp_path, monkeypatch):
+    """Happy path reads the constant ``coverage.xml`` under the repo root."""
+    import builtins
+    import os
+
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     coverage_file = tmp_path / "coverage.xml"
     coverage_file.write_text('<coverage line-rate="0.25"></coverage>')
+    (tmp_path / "other.xml").write_text('<coverage line-rate="0.99"></coverage>')
 
     def fake_run(cmd, **kwargs):
         return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
 
     monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
 
+    opened = []
+    real_open = builtins.open
+
+    def tracking_open(file, *args, **kwargs):
+        opened.append(os.fspath(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", tracking_open)
+
     registry = _isolated_registry()
     collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
     collector.collect_test_metrics("coverage.xml")
 
     assert registry.get_sample_values("dev_coverage_percent")[("dev_coverage_percent", ())] == 25.0
+    expected = os.path.join(os.path.realpath(tmp_path), "coverage.xml")
+    xml_opened = [os.path.realpath(path) for path in opened if path.endswith(".xml")]
+    assert xml_opened == [expected]
 
 
 def test_collect_test_metrics_rejects_path_traversal_coverage_xml(tmp_path, monkeypatch):
@@ -168,3 +185,83 @@ def test_collect_test_metrics_rejects_path_traversal_coverage_xml(tmp_path, monk
     collector.collect_test_metrics("../outside-coverage.xml")
 
     assert registry.get_sample_values("dev_coverage_percent") == {}
+
+
+def test_collect_test_metrics_rejects_xml_bomb(tmp_path, monkeypatch):
+    """Entity expansion must not be parsed into a coverage metric."""
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    bomb = """<?xml version="1.0"?>
+<!DOCTYPE coverage [
+  <!ENTITY a "aaaaaaaaaa">
+  <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+]>
+<coverage line-rate="&b;"></coverage>
+"""
+    (tmp_path / "coverage.xml").write_text(bomb)
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+    collector.collect_test_metrics("coverage.xml")
+
+    assert registry.get_sample_values("dev_coverage_percent") == {}
+
+
+
+def test_collect_coverage_rejects_sibling_symlink_and_absolute(tmp_path, monkeypatch):
+    """Absolute paths, directory components, sibling prefixes, and symlinks must not be opened."""
+    import builtins
+    import os
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    def fake_run(cmd, **kwargs):
+        return type("Result", (), {"stdout": "1 passed", "stderr": "", "returncode": 0})()
+
+    monkeypatch.setattr("return42.observability.dev_collector.subprocess.run", fake_run)
+
+    sibling = Path(str(tmp_path) + "-sibling")
+    sibling.mkdir()
+    outside = sibling / "coverage.xml"
+    outside.write_text('<coverage line-rate="0.91"></coverage>')
+    # A bare startswith(repo_root) matches this sibling directory. The guard
+    # must require the separator so the sibling is not treated as inside.
+    assert str(outside).startswith(str(tmp_path))
+    assert not str(outside).startswith(str(tmp_path) + os.sep)
+
+    opened = []
+    real_open = builtins.open
+
+    def tracking_open(file, *args, **kwargs):
+        opened.append(os.fspath(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", tracking_open)
+
+    registry = _isolated_registry()
+    collector = DevelopmentCollector(repo_path=tmp_path, registry=registry)
+
+    collector.collect_test_metrics(str(outside))
+    collector.collect_test_metrics("../" + sibling.name + "/coverage.xml")
+    # Directory component whose basename is the allowed name must not be opened.
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    nested_xml = nested / "coverage.xml"
+    nested_xml.write_text('<coverage line-rate="0.33"></coverage>')
+    collector.collect_test_metrics("nested/coverage.xml")
+    collector.collect_test_metrics("nested\\coverage.xml")
+    link = tmp_path / "coverage.xml"
+    link.symlink_to(outside)
+    collector.collect_test_metrics("coverage.xml")
+    (tmp_path / "not-a-file").mkdir()
+    collector.collect_test_metrics("not-a-file")
+    collector.collect_test_metrics("other.xml")
+
+    assert registry.get_sample_values("dev_coverage_percent") == {}
+    outside_real = os.path.realpath(outside)
+    nested_real = os.path.realpath(nested_xml)
+    assert all(os.path.realpath(p) not in {outside_real, nested_real} for p in opened)
