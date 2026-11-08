@@ -10,11 +10,11 @@ const mockedListen = vi.mocked(listen);
 
 describe('useSidecarEvent', () => {
   let capturedHandler: ((event: { payload: string }) => void) | undefined;
-  let unlistenFn: ReturnType<typeof vi.fn>;
+  let unlistenFn: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     capturedHandler = undefined;
-    unlistenFn = vi.fn();
+    unlistenFn = vi.fn<() => void>();
     mockedListen.mockImplementation(async (eventName, handler) => {
       if (eventName === 'cliniclink:event') {
         capturedHandler = handler as (event: { payload: string }) => void;
